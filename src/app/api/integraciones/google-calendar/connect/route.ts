@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { requireApiAuth } from '@/lib/api-auth'
+import { baseUrl } from '@/lib/baseUrl'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: Request) {
   const guard = await requireApiAuth(['SUPERVISOR'])
   if (guard) return guard
 
-  const redirectUri = `${process.env.NEXTAUTH_URL}/api/integraciones/google-calendar/callback`
+  const redirectUri = `${baseUrl(req)}/api/integraciones/google-calendar/callback`
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID || '',
     redirect_uri: redirectUri,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { baseUrl } from '@/lib/baseUrl'
 import { encryptSecret } from '@/lib/googleCalendar'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
 
   if (!code) return redirectAjustes('error')
 
-  const redirectUri = `${process.env.NEXTAUTH_URL}/api/integraciones/google-calendar/callback`
+  const redirectUri = `${baseUrl(req)}/api/integraciones/google-calendar/callback`
   const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
