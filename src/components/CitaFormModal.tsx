@@ -1,0 +1,319 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { Modal } from '@/components/Modal'
+import { useToast } from '@/components/Toast'
+
+interface Paciente {
+  id: string
+  nombre: string
+}
+
+interface Tratamiento {
+  id: string
+  nombre: string
+  activo: boolean
+  duracionMin: number
+}
+
+export interface Cita {
+  id: string
+  fecha: string
+  tratamiento: string
+  duracionMin: number | null
+  descripcion: string | null
+  estado: string
+  origen: string
+  paciente: Paciente | null
+  montoPrepagado?: number | null
+  odontologo?: { id: string; name: string } | null
+}
+
+interface CitaFormModalProps {
+  modo: 'crear' | 'editar'
+  cita?: Cita
+  fechaInicial?: string
+  /** Paciente preseleccionado (al agendar desde su expediente). */
+  pacienteInicial?: Paciente | null
+  pacientes: Paciente[]
+  tratamientos: Tratamiento[]
+  odontologos: { id: string; name: string }[]
+  onClose: () => void
+  onGuardado: (cita: Cita) => void
+  onEliminado: (citaId: string) => void
+}
+
+function toDateInput(iso: string) {
+  const date = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function toHoraInput(iso: string) {
+  const date = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const hoyKey = toDateInput(new Date().toISOString())
+
+const HORAS_OPCIONES = Array.from({ length: 96 }, (_, i) => {
+  const totalMin = i * 15
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(Math.floor(totalMin / 60))}:${pad(totalMin % 60)}`
+})
+
+export function CitaFormModal({ modo, cita, fechaInicial, pacienteInicial, pacientes, tratamientos, odontologos, onClose, onGuardado, onEliminado }: CitaFormModalProps) {
+  const toast = useToast()
+  const [pacienteId, setPacienteId] = useState(cita?.paciente?.id || pacienteInicial?.id || '')
+  const [pacienteQuery, setPacienteQuery] = useState(cita?.paciente?.nombre || pacienteInicial?.nombre || '')
+  const [showPacienteDropdown, setShowPacienteDropdown] = useState(false)
+  const [fecha, setFecha] = useState(cita ? toDateInput(cita.fecha) : fechaInicial || '')
+  const [hora, setHora] = useState(cita ? toHoraInput(cita.fecha) : '09:00')
+  const [tratamiento, setTratamiento] = useState(cita?.tratamiento || '')
+  const [duracionMin, setDuracionMin] = useState(cita?.duracionMin ? String(cita.duracionMin) : '')
+  const [showTratamientoDropdown, setShowTratamientoDropdown] = useState(false)
+  const [estado, setEstado] = useState(cita?.estado || 'PENDIENTE')
+  const [montoPrepagado, setMontoPrepagado] = useState(cita?.montoPrepagado ? String(cita.montoPrepagado) : '')
+  const [odontologoId, setOdontologoId] = useState(cita?.odontologo?.id || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const pacientesFiltrados = useMemo(() => {
+    const query = pacienteQuery.trim().toLowerCase()
+    if (!query) return pacientes.slice(0, 8)
+    return pacientes.filter((c) => c.nombre.toLowerCase().includes(query)).slice(0, 8)
+  }, [pacientes, pacienteQuery])
+
+  const tratamientosFiltrados = useMemo(() => {
+    const query = tratamiento.trim().toLowerCase()
+    if (!query) return tratamientos.filter((t) => t.activo).slice(0, 8)
+    return tratamientos.filter((t) => t.activo && t.nombre.toLowerCase().includes(query)).slice(0, 8)
+  }, [tratamientos, tratamiento])
+
+  const elegirTratamiento = (t: Tratamiento) => {
+    setTratamiento(t.nombre)
+    setDuracionMin(t.duracionMin ? String(t.duracionMin) : '')
+    setShowTratamientoDropdown(false)
+  }
+
+  const fechaPasada = modo === 'crear' && Boolean(fecha) && fecha < hoyKey
+  const puedeGuardar = (modo === 'crear' ? Boolean(pacienteId && fecha && hora && tratamiento) : Boolean(fecha && hora && tratamiento)) && !fechaPasada
+
+  const guardar = async () => {
+    setSaving(true)
+    setError('')
+    // Se arma un Date con las partes locales (año/mes/día/hora) y se serializa con
+    // toISOString(): así el servidor recibe un instante UTC sin ambigüedad, sin
+    // depender de la zona horaria en la que corra el proceso de Node (Vercel usa
+    // UTC por defecto, distinto a la hora de Perú).
+    const [anio, mes, dia] = fecha.split('-').map(Number)
+    const [horaNum, minuto] = hora.split(':').map(Number)
+    const fechaHora = new Date(anio, mes - 1, dia, horaNum, minuto).toISOString()
+    const response = await fetch('/api/citas', {
+      method: modo === 'crear' ? 'POST' : 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        modo === 'crear'
+          ? { pacienteId, fecha: fechaHora, tratamiento, duracionMin: duracionMin || null, estado, montoPrepagado: montoPrepagado || null, odontologoId: odontologoId || null }
+          : { id: cita!.id, pacienteId: pacienteId || undefined, fecha: fechaHora, tratamiento, duracionMin: duracionMin || null, estado, montoPrepagado: montoPrepagado || null, odontologoId: odontologoId || null }
+      ),
+    })
+    setSaving(false)
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      setError(data.error || 'No se pudo guardar la cita')
+      return
+    }
+    const guardada = await response.json()
+    onGuardado(guardada)
+    onClose()
+    toast.success(modo === 'crear' ? 'Cita creada' : 'Cita actualizada')
+  }
+
+  const eliminar = async () => {
+    if (!cita) return
+    if (!window.confirm('¿Eliminar esta cita? Esta acción no se puede deshacer.')) return
+    setSaving(true)
+    setError('')
+    const response = await fetch(`/api/citas?id=${cita.id}`, { method: 'DELETE' })
+    setSaving(false)
+    if (!response.ok) {
+      setError('No se pudo eliminar la cita')
+      return
+    }
+    onEliminado(cita.id)
+    onClose()
+    toast.success('Cita eliminada')
+  }
+
+  return (
+    <Modal title={modo === 'crear' ? 'Nueva cita' : 'Editar cita'} onClose={onClose}>
+      <div className="space-y-4">
+        {error && <p className="rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-900">{error}</p>}
+
+        {cita?.origen === 'GOOGLE' && cita.descripcion && (
+          <div className="rounded-2xl border border-[#e8f0fe] bg-ink-50 px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1a53a1]">Contenido original de Google Calendar</p>
+            <p className="mt-1 whitespace-pre-line text-sm text-ink-600">{cita.descripcion}</p>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-ink-700">Paciente{modo === 'editar' && ' (opcional)'}</label>
+          <div className="relative">
+            <input
+              value={pacienteQuery}
+              onChange={(event) => {
+                setPacienteQuery(event.target.value)
+                setPacienteId('')
+                setShowPacienteDropdown(true)
+              }}
+              onFocus={() => setShowPacienteDropdown(true)}
+              onBlur={() => setTimeout(() => setShowPacienteDropdown(false), 150)}
+              autoComplete="off"
+              placeholder="Busca un paciente por nombre"
+              className="field mt-2"
+            />
+            {showPacienteDropdown && pacientesFiltrados.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-lg">
+                {pacientesFiltrados.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onMouseDown={() => {
+                      setPacienteId(c.id)
+                      setPacienteQuery(c.nombre)
+                      setShowPacienteDropdown(false)
+                    }}
+                    className="block w-full px-4 py-2.5 text-left text-sm hover:bg-brand-50"
+                  >
+                    {c.nombre}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="cita-fecha" className="block text-sm font-medium text-ink-700">Fecha</label>
+            <input
+              id="cita-fecha"
+              type="date"
+              value={fecha}
+              min={modo === 'crear' ? hoyKey : undefined}
+              onChange={(event) => setFecha(event.target.value)}
+              className="field mt-2"
+            />
+          </div>
+          <div>
+            <label htmlFor="cita-hora" className="block text-sm font-medium text-ink-700">Hora</label>
+            <select id="cita-hora" value={hora} onChange={(event) => setHora(event.target.value)} className="field mt-2">
+              {HORAS_OPCIONES.map((h) => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
+          </div>
+          {fechaPasada && <p className="col-span-2 -mt-1 text-xs font-semibold text-danger-600">No se pueden crear citas en fechas anteriores a hoy.</p>}
+        </div>
+
+        <div>
+          <label htmlFor="cita-tratamiento" className="block text-sm font-medium text-ink-700">Tratamiento</label>
+          <div className="relative">
+            <input
+              id="cita-tratamiento"
+              value={tratamiento}
+              onChange={(event) => { setTratamiento(event.target.value); setShowTratamientoDropdown(true) }}
+              onFocus={() => setShowTratamientoDropdown(true)}
+              onBlur={() => setTimeout(() => setShowTratamientoDropdown(false), 150)}
+              autoComplete="off"
+              placeholder="Escribe o elige un tratamiento"
+              className="field mt-2"
+            />
+            {showTratamientoDropdown && tratamientosFiltrados.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-lg">
+                {tratamientosFiltrados.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onMouseDown={() => elegirTratamiento(t)}
+                    className="block w-full px-4 py-2.5 text-left text-sm hover:bg-brand-50"
+                  >
+                    {t.nombre}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="cita-duracion" className="block text-sm font-medium text-ink-700">Duración (minutos, opcional)</label>
+          <input
+            id="cita-duracion"
+            type="number"
+            min={5}
+            step={5}
+            value={duracionMin}
+            onChange={(event) => setDuracionMin(event.target.value)}
+            placeholder="60"
+            className="field mt-2"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="cita-odontologo" className="block text-sm font-medium text-ink-700">Odontólogo (opcional)</label>
+            <select id="cita-odontologo" value={odontologoId} onChange={(event) => setOdontologoId(event.target.value)} className="field mt-2">
+              <option value="">Sin asignar</option>
+              {odontologos.map((e) => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="cita-prepago" className="block text-sm font-medium text-ink-700">Prepago S/ (opcional)</label>
+            <input
+              id="cita-prepago"
+              type="number"
+              min={0}
+              step="0.01"
+              value={montoPrepagado}
+              onChange={(event) => setMontoPrepagado(event.target.value)}
+              placeholder="0.00"
+              className="field mt-2"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-ink-700">Estado</label>
+          <select value={estado} onChange={(event) => setEstado(event.target.value)} className="field mt-2">
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="CONFIRMADA">Confirmada</option>
+            <option value="ATENDIDA">Atendida</option>
+            <option value="CANCELADA">Cancelada</option>
+          </select>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button type="button" disabled={saving || !puedeGuardar} onClick={() => void guardar()} className="btn-brand flex-1 disabled:opacity-60">
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+          {modo === 'editar' && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void eliminar()}
+              className="rounded-full border border-danger-200 px-5 py-2.5 text-sm font-semibold text-danger-700 transition hover:bg-danger-50 disabled:opacity-60"
+            >
+              Eliminar
+            </button>
+          )}
+        </div>
+      </div>
+    </Modal>
+  )
+}

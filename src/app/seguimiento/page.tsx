@@ -1,0 +1,169 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { PacienteHistorialLink } from '@/components/PacienteHistorialLink'
+import { useToast } from '@/components/Toast'
+
+type ColorEstado = 'VENCIDO' | 'PRONTO' | 'EN_RANGO' | 'SIN_DATO'
+
+interface SeguimientoPaciente {
+  pacienteId: string
+  nombre: string
+  celular: string | null
+  tratamiento: string | null
+  fechaSugerida: string | null
+  diasRestantes: number | null
+  colorEstado: ColorEstado
+}
+
+const estiloPorColor: Record<ColorEstado, string> = {
+  VENCIDO: 'border-danger-200 bg-danger-50 text-danger-900',
+  PRONTO: 'border-amber-200 bg-amber-50 text-amber-900',
+  EN_RANGO: 'border-brand-200 bg-brand-50 text-brand-900',
+  SIN_DATO: 'border-ink-200 bg-ink-50 text-ink-500',
+}
+
+const etiquetaPorColor: Record<ColorEstado, string> = {
+  VENCIDO: 'Contactar ahora',
+  PRONTO: 'Contactar pronto',
+  EN_RANGO: 'En rango',
+  SIN_DATO: 'Sin dato',
+}
+
+function normalizarWhatsapp(telefono: string) {
+  const digitos = telefono.replace(/\D/g, '')
+  if (digitos.length === 9) return `51${digitos}`
+  return digitos
+}
+
+function formatearDiasRestantes(dias: number | null) {
+  if (dias === null) return 'Sin tratamiento con días sugeridos'
+  if (dias < 0) return `Vencido hace ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'}`
+  if (dias === 0) return 'Vence hoy'
+  return `Faltan ${dias} día${dias === 1 ? '' : 's'}`
+}
+
+export default function SeguimientoPage() {
+  const toast = useToast()
+  const [pacientes, setPacientes] = useState<SeguimientoPaciente[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [posponiendoId, setPosponiendoId] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/seguimiento')
+      const data = await response.json()
+      if (!response.ok) throw new Error(data?.error || 'No se pudo cargar el seguimiento')
+      setPacientes(Array.isArray(data) ? data : [])
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'No se pudo cargar el seguimiento')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void load() }, [])
+
+  const posponer = async (pacienteId: string, dias: number) => {
+    setPosponiendoId(pacienteId)
+    const response = await fetch(`/api/seguimiento/${pacienteId}/posponer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dias }),
+    })
+    setPosponiendoId(null)
+    if (!response.ok) {
+      toast.error('No se pudo posponer el aviso')
+      return
+    }
+    await load()
+    toast.success(`Aviso pospuesto ${dias} días`)
+  }
+
+  return (
+    <div className="page-shell px-4 py-8 sm:px-6 lg:px-10">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="card-surface">
+          <p className="eyebrow">Seguimiento</p>
+          <h1 className="mt-3 page-heading text-3xl">Seguimiento de pacientes</h1>
+          <p className="mt-2 text-ink-600">Pacientes ordenados por urgencia de contacto según los días sugeridos para repetir su tratamiento.</p>
+        </div>
+
+        <div className="card-surface overflow-x-auto">
+          {loading ? (
+            <p className="text-sm text-ink-500">Cargando pacientes...</p>
+          ) : error ? (
+            <p className="text-sm text-danger-600">{error}</p>
+          ) : pacientes.length === 0 ? (
+            <p className="text-sm text-ink-500">No hay pacientes registrados.</p>
+          ) : (
+            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-ink-200 text-ink-500">
+                  <th className="py-2 pr-4">Paciente</th>
+                  <th className="py-2 pr-4">Tratamiento</th>
+                  <th className="py-2 pr-4">Días restantes</th>
+                  <th className="py-2 pr-4">Teléfono</th>
+                  <th className="py-2 pr-4">Posponer aviso</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pacientes.map((paciente) => (
+                  <tr key={paciente.pacienteId} className="border-b border-ink-100">
+                    <td className="py-3 pr-4 font-medium text-ink-900">
+                      <PacienteHistorialLink pacienteId={paciente.pacienteId} nombre={paciente.nombre} />
+                    </td>
+                    <td className="py-3 pr-4 text-ink-600">{paciente.tratamiento || '—'}</td>
+                    <td className="py-3 pr-4">
+                      <span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${estiloPorColor[paciente.colorEstado]}`}>
+                        {etiquetaPorColor[paciente.colorEstado]}
+                      </span>
+                      <p className="mt-1 text-xs text-ink-500">{formatearDiasRestantes(paciente.diasRestantes)}</p>
+                    </td>
+                    <td className="py-3 pr-4">
+                      {paciente.celular ? (
+                        <div className="flex flex-col gap-1 text-xs">
+                          <a href={`tel:${paciente.celular}`} className="font-semibold text-ink-700 underline decoration-dotted underline-offset-2 hover:text-brand-700">
+                            {paciente.celular}
+                          </a>
+                          <a
+                            href={`https://wa.me/${normalizarWhatsapp(paciente.celular)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-semibold text-brand-700 underline decoration-dotted underline-offset-2 hover:text-brand-900"
+                          >
+                            WhatsApp
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-ink-400">Sin teléfono</span>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <div className="flex gap-2">
+                        {[7, 15, 30].map((dias) => (
+                          <button
+                            key={dias}
+                            type="button"
+                            disabled={posponiendoId === paciente.pacienteId}
+                            onClick={() => void posponer(paciente.pacienteId, dias)}
+                            className="rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700 transition hover:bg-ink-50 disabled:opacity-60"
+                          >
+                            +{dias}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

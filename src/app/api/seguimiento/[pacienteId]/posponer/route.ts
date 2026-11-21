@@ -1,0 +1,65 @@
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { requireApiAuth } from '@/lib/api-auth'
+
+export const dynamic = 'force-dynamic'
+
+const MS_POR_DIA = 24 * 60 * 60 * 1000
+
+export async function POST(req: Request, ctx: { params: Promise<{ pacienteId: string }> }) {
+  const params = await ctx.params
+  const guard = await requireApiAuth(['ADMIN', 'SUPERVISOR'])
+  if (guard) return guard
+
+  const body = await req.json()
+  const dias = Number(body.dias)
+  if (!Number.isFinite(dias) || dias <= 0) {
+    return NextResponse.json({ error: 'dias debe ser un número mayor a 0' }, { status: 400 })
+  }
+
+  const paciente = await prisma.paciente.findUnique({
+    where: { id: params.pacienteId },
+    select: {
+      recordatorioPospuestoHasta: true,
+      atenciones: {
+        select: {
+          tratamientos: {
+            where: { estado: 'FINALIZADA', horaFin: { not: null } },
+            select: { horaFin: true, diasProximoTratamiento: true, tratamiento: { select: { diasProximoTratamiento: true } } },
+          },
+        },
+      },
+    },
+  })
+
+  if (!paciente) {
+    return NextResponse.json({ error: 'Paciente no encontrado' }, { status: 404 })
+  }
+
+  const lineas = paciente.atenciones.flatMap((atencion) => atencion.tratamientos)
+  const ultima = lineas.reduce<typeof lineas[number] | null>(
+    (masReciente, linea) =>
+      !masReciente || (linea.horaFin && masReciente.horaFin && linea.horaFin > masReciente.horaFin) ? linea : masReciente,
+    null
+  )
+  const diasSugeridos = ultima ? ultima.diasProximoTratamiento ?? ultima.tratamiento.diasProximoTratamiento ?? null : null
+
+  let fechaBase = new Date()
+  if (ultima && ultima.horaFin && diasSugeridos) {
+    const fechaSugerida = new Date(ultima.horaFin.getTime() + diasSugeridos * MS_POR_DIA)
+    if (fechaSugerida > fechaBase) fechaBase = fechaSugerida
+  }
+  if (paciente.recordatorioPospuestoHasta && paciente.recordatorioPospuestoHasta > fechaBase) {
+    fechaBase = paciente.recordatorioPospuestoHasta
+  }
+
+  const recordatorioPospuestoHasta = new Date(fechaBase.getTime() + dias * MS_POR_DIA)
+
+  const actualizado = await prisma.paciente.update({
+    where: { id: params.pacienteId },
+    data: { recordatorioPospuestoHasta },
+    select: { id: true, recordatorioPospuestoHasta: true },
+  })
+
+  return NextResponse.json(actualizado)
+}

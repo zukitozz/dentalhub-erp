@@ -1,0 +1,68 @@
+import { NextResponse } from 'next/server'
+import { FotoTipo } from '@/generated/prisma/enums'
+import { prisma } from '@/lib/prisma'
+import { requireApiAuth } from '@/lib/api-auth'
+import { guardarFotoAtencion, urlFirmada } from '@/lib/storage'
+
+export const dynamic = 'force-dynamic'
+
+const ROLES_ATENCION = ['ADMIN', 'SUPERVISOR', 'ODONTOLOGO'] as const
+
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const params = await ctx.params
+  const guard = await requireApiAuth()
+  if (guard) return guard
+
+  const fotos = await prisma.atencionFoto.findMany({
+    where: { atencionId: params.id },
+    orderBy: { creadoAt: 'asc' },
+  })
+
+  const fotosConUrl = await Promise.all(
+    fotos.map(async ({ key, ...foto }) => ({ ...foto, url: await urlFirmada(key) }))
+  )
+
+  return NextResponse.json(fotosConUrl)
+}
+
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const params = await ctx.params
+  const guard = await requireApiAuth([...ROLES_ATENCION])
+  if (guard) return guard
+
+  const atencion = await prisma.atencion.findUnique({ where: { id: params.id } })
+  if (!atencion) {
+    return NextResponse.json({ error: 'Atención no encontrada' }, { status: 404 })
+  }
+
+  const formData = await req.formData()
+  const file = formData.get('file')
+  const descripcion = formData.get('descripcion')
+  const tipo = formData.get('tipo')
+
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: 'Archivo requerido' }, { status: 400 })
+  }
+
+  try {
+    const key = await guardarFotoAtencion(atencion.id, file)
+    const { key: _key, ...foto } = await prisma.atencionFoto.create({
+      data: {
+        atencionId: atencion.id,
+        pacienteId: atencion.pacienteId,
+        key,
+        tipo: typeof tipo === 'string' && tipo in FotoTipo ? (tipo as keyof typeof FotoTipo) : null,
+        descripcion: typeof descripcion === 'string' && descripcion ? descripcion : null,
+      },
+    })
+    return NextResponse.json({ ...foto, url: await urlFirmada(key) }, { status: 201 })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'TIPO_NO_SOPORTADO') {
+      return NextResponse.json({ error: 'Formato de imagen no soportado (usa JPG, PNG, WEBP o HEIC)' }, { status: 400 })
+    }
+    if (error instanceof Error && error.message === 'ARCHIVO_MUY_GRANDE') {
+      return NextResponse.json({ error: 'La imagen supera el tamaño máximo permitido (8MB)' }, { status: 400 })
+    }
+    throw error
+  }
+}

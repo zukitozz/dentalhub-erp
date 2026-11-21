@@ -1,0 +1,725 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                     String                 @id @default(uuid())
+  name                   String
+  email                  String                 @unique
+  password               String
+  role                   UserRole               @default(ADMIN)
+  celular1               String?
+  celular2               String?
+  activo                 Boolean                @default(true)
+  // Datos profesionales (aparecen en recetas, presupuestos y consentimientos).
+  colegiatura            String?
+  especialidad           String?
+  createdAt              DateTime               @default(now())
+  evoluciones            Evolucion[]
+  hallazgos              OdontogramaHallazgo[]
+  documentos             Documento[]
+  cierresTurno           CierreTurno[]
+  facturas               Factura[]
+  tratamientosRealizados AtencionTratamiento[]  @relation("AtencionesOdontologo")
+  consultorioEstadoLogs  ConsultorioEstadoLog[]
+  movimientosInventario  MovimientoInventario[]
+  planes                 Plan[]
+  gastos                 Gasto[]
+  planSesiones           PlanSesion[]
+  citasAsignadas         Cita[]                 @relation("CitaOdontologo")
+  comisionesGasto        Gasto[]                @relation("GastoOdontologo")
+}
+
+enum UserRole {
+  SUPERVISOR
+  ADMIN
+  ODONTOLOGO
+}
+
+model Paciente {
+  id                         String                @id @default(uuid())
+  nombre                     String
+  dni                        String?               @unique
+  ruc                        String?               @unique
+  carnetExtranjeria          String?               @unique
+  razonSocial                String?
+  celular                    String?
+  distrito                   String?
+  email                      String?
+  direccion                  String?
+  fechaNacimiento            DateTime?
+  sexo                       String?
+  ocupacion                  String?
+  // Apoderado / contacto de emergencia (obligatorio en menores de edad).
+  apoderado                  String?
+  contactoEmergencia         String?
+  alergias                   String?
+  notas                      String?
+  recordatorioPospuestoHasta DateTime?
+  historia                   HistoriaClinica?
+  evoluciones                Evolucion[]
+  hallazgos                  OdontogramaHallazgo[]
+  fotos                      AtencionFoto[]
+  documentos                 Documento[]
+  citas                      Cita[]
+  facturas                   Factura[]
+  atenciones                 Atencion[]
+  planes                     Plan[]
+  createdAt                  DateTime              @default(now())
+}
+
+model Cita {
+  id             String      @id @default(uuid())
+  paciente       Paciente?   @relation(fields: [pacienteId], references: [id])
+  pacienteId     String?
+  fecha          DateTime
+  tratamiento    String
+  duracionMin    Int?
+  descripcion    String?
+  montoPrepagado Float?
+  odontologo     User?       @relation("CitaOdontologo", fields: [odontologoId], references: [id])
+  odontologoId   String?
+  estado         CitaEstado  @default(PENDIENTE)
+  registrado     Boolean     @default(false)
+  origen         CitaOrigen  @default(APP)
+  googleEventId  String?     @unique
+  createdAt      DateTime    @default(now())
+  atenciones     Atencion[]
+  evolucions     Evolucion[]
+
+  @@index([odontologoId])
+}
+
+enum CitaEstado {
+  PENDIENTE
+  CONFIRMADA
+  ATENDIDA
+  CANCELADA
+  EXPIRADA
+}
+
+enum CitaOrigen {
+  APP
+  GOOGLE
+}
+
+model Consultorio {
+  id         String                 @id @default(uuid())
+  nombre     String
+  estado     ConsultorioEstado      @default(DISPONIBLE)
+  createdAt  DateTime               @default(now())
+  atenciones Atencion[]
+  estadoLogs ConsultorioEstadoLog[]
+}
+
+enum ConsultorioEstado {
+  DISPONIBLE
+  ATENCION
+  LIMPIEZA
+  MANTENIMIENTO
+}
+
+enum AtencionEstado {
+  PENDIENTE
+  EN_CURSO
+  FINALIZADA
+  CANCELADA
+}
+
+// Representa una visita/sesión del paciente. Ya no requiere consultorio ni un único
+// tratamiento: el detalle de cada tratamiento vive en AtencionTratamiento.
+model Atencion {
+  id            String       @id @default(uuid())
+  consultorio   Consultorio? @relation(fields: [consultorioId], references: [id])
+  consultorioId String?
+  paciente      Paciente     @relation(fields: [pacienteId], references: [id])
+  pacienteId    String
+  cita          Cita?        @relation(fields: [citaId], references: [id])
+  citaId        String?
+  horaInicio    DateTime     @default(now())
+  horaFin       DateTime?
+  notas         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  estadoLogs   ConsultorioEstadoLog[]
+  fotos        AtencionFoto[]
+  evoluciones  Evolucion[]
+  hallazgos    OdontogramaHallazgo[]
+  documentos   Documento[]
+  productos    AtencionProducto[]
+  tratamientos AtencionTratamiento[]
+
+  @@index([consultorioId])
+  @@index([pacienteId])
+  @@index([citaId])
+}
+
+// Línea de tratamiento dentro de una Atencion (visita). Una visita puede tener
+// varias, cada una con su propia odontologo, estado y horaInicio/horaFin
+// para medir cuánto demora cada tratamiento.
+model AtencionTratamiento {
+  id                     String         @id @default(uuid())
+  atencion               Atencion       @relation(fields: [atencionId], references: [id])
+  atencionId             String
+  tratamiento            Tratamiento    @relation(fields: [tratamientoId], references: [id])
+  tratamientoId          String
+  odontologo             User           @relation("AtencionesOdontologo", fields: [odontologoId], references: [id])
+  odontologoId           String
+  estado                 AtencionEstado @default(PENDIENTE)
+  horaInicio             DateTime?
+  horaFin                DateTime?
+  notas                  String?
+  diasProximoTratamiento Int?
+  // Pieza dental (notación FDI: 11-48 permanentes, 51-85 temporales) y superficie tratada.
+  pieza                  Int?
+  superficie             String?
+  orden                  Int            @default(0)
+  // Precio acordado al asignar el tratamiento a la visita (puede diferir del catálogo).
+  // precioCatalogo guarda el precio del Tratamiento en ese momento, para poder comparar después.
+  precio                 Float?
+  precioCatalogo         Float?
+  // Comisión pagada al momento a la odontologo; se registra además como Gasto.
+  comision               Float?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  factura   Factura? @relation(fields: [facturaId], references: [id])
+  facturaId String?
+
+  @@index([atencionId])
+  @@index([tratamientoId])
+  @@index([odontologoId])
+  @@index([facturaId])
+}
+
+model AtencionProducto {
+  id                   String   @id @default(uuid())
+  atencion             Atencion @relation(fields: [atencionId], references: [id], onDelete: Cascade)
+  atencionId           String
+  producto             Producto @relation(fields: [productoId], references: [id])
+  productoId           String
+  cantidad             Int      @default(1)
+  precioUnit           Float
+  // Precio del catálogo (Producto.precioVenta) en el momento en que se agregó, para poder
+  // evidenciar si precioUnit fue modificado respecto al catálogo.
+  precioCatalogo       Float?
+  // Comisión pagada al momento a la odontologo que vendió el producto (también queda como Gasto).
+  comision             Float?
+  comisionOdontologoId String?
+  creadoAt             DateTime @default(now())
+
+  factura   Factura? @relation(fields: [facturaId], references: [id])
+  facturaId String?
+
+  @@index([atencionId])
+  @@index([facturaId])
+}
+
+enum FotoTipo {
+  ANTES
+  DESPUES
+  EVOLUCION
+  RADIOGRAFIA
+  INTRAORAL
+  EXTRAORAL
+  OTRO
+}
+
+model AtencionFoto {
+  id          String    @id @default(uuid())
+  atencion    Atencion? @relation(fields: [atencionId], references: [id], onDelete: Cascade)
+  atencionId  String?
+  paciente    Paciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  pacienteId  String
+  tipo        FotoTipo?
+  key         String
+  descripcion String?
+  creadoAt    DateTime  @default(now())
+
+  @@index([atencionId])
+  @@index([pacienteId])
+}
+
+model ConsultorioEstadoLog {
+  id             String            @id @default(uuid())
+  consultorio    Consultorio       @relation(fields: [consultorioId], references: [id])
+  consultorioId  String
+  estadoAnterior ConsultorioEstado
+  estadoNuevo    ConsultorioEstado
+  usuario        User              @relation(fields: [usuarioId], references: [id])
+  usuarioId      String
+  atencion       Atencion?         @relation(fields: [atencionId], references: [id])
+  atencionId     String?
+  motivo         String?
+  creadoAt       DateTime          @default(now())
+
+  @@index([consultorioId, creadoAt])
+}
+
+model Producto {
+  id            String                 @id @default(uuid())
+  nombre        String
+  descripcion   String?
+  precioVenta   Float
+  precioCosto   Float?
+  stock         Int                    @default(0)
+  alertaStock   Int                    @default(5)
+  codigoBarras  String?                @unique
+  imagenUrl     String?
+  creadoAt      DateTime               @default(now())
+  facturaItems  FacturaItem[]
+  tratamientos  TratamientoProducto[]
+  atencionItems AtencionProducto[]
+  movimientos   MovimientoInventario[]
+}
+
+enum MovimientoTipo {
+  ENTRADA
+  SALIDA
+  AJUSTE
+}
+
+model MovimientoInventario {
+  id            String         @id @default(uuid())
+  producto      Producto       @relation(fields: [productoId], references: [id])
+  productoId    String
+  tipo          MovimientoTipo
+  cantidad      Int
+  stockAnterior Int
+  stockNuevo    Int
+  motivo        String?
+  usuario       User           @relation(fields: [usuarioId], references: [id])
+  usuarioId     String
+  creadoAt      DateTime       @default(now())
+
+  @@index([productoId, creadoAt])
+}
+
+model Tratamiento {
+  id                     String                @id @default(uuid())
+  nombre                 String
+  descripcion            String?
+  categoria              String?
+  precio                 Float
+  duracionMin            Int
+  activo                 Boolean               @default(true)
+  diasProximoTratamiento Int?
+  creadoAt               DateTime              @default(now())
+  insumos                TratamientoProducto[]
+  atenciones             AtencionTratamiento[]
+  planes                 Plan[]
+  planItems              PlanItem[]
+}
+
+model TratamientoProducto {
+  id            String      @id @default(uuid())
+  tratamiento   Tratamiento @relation(fields: [tratamientoId], references: [id], onDelete: Cascade)
+  tratamientoId String
+  producto      Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  productoId    String
+  cantidad      Float       @default(1)
+  unidad        String      @default("unidad")
+
+  @@unique([tratamientoId, productoId])
+}
+
+model Factura {
+  id                   String                @id @default(uuid())
+  paciente             Paciente              @relation(fields: [pacienteId], references: [id])
+  pacienteId           String
+  tipo                 FacturaTipo
+  total                Float
+  metodoPago           MetodoPago
+  estado               String
+  activo               Boolean               @default(true)
+  creadoAt             DateTime              @default(now())
+  items                FacturaItem[]
+  atencionTratamientos AtencionTratamiento[]
+  atencionProductos    AtencionProducto[]
+
+  tipoComprobante             String?
+  numeracionComprobante       String?
+  fechaEmision                DateTime?
+  tipoMoneda                  String?      @default("PEN")
+  tipoOperacion               String?      @default("0101")
+  tipoNota                    String?
+  tipoDocumentoAfectado       String?
+  fechaDocumentoAfectado      DateTime?
+  numeracionDocumentoAfectado String?
+  motivoDocumentoAfectado     String?
+  totalVenta                  String?
+  montoLetras                 String?
+  cadenaParaCodigoQr          String?
+  codigoHash                  String?
+  pdfBytes                    String?
+  url                         String?
+  errors                      String?
+  comentario                  String?
+  pagoTarjeta                 Float?
+  pagoEfectivo                Float?
+  pagoYape                    Float?
+  pagoTransferencia           Float?
+  pagoDeposito                Float?
+  billete                     Float?
+  ruc                         String?
+  enviado                     Boolean      @default(false)
+  estadoNotaDespacho          Boolean      @default(false)
+  comprobanteNotaDespacho     String?
+  fechaFacturadoNotaDespacho  DateTime?
+  usuario                     User?        @relation(fields: [usuarioId], references: [id])
+  usuarioId                   String?
+  cierreTurno                 CierreTurno? @relation(fields: [cierreTurnoId], references: [id], onDelete: SetNull)
+  cierreTurnoId               String?
+  fechaHora                   DateTime?
+  gravadas                    Float?
+  igv                         Float?
+  xmlEnvio                    String?
+  // CDR de SUNAT, sin reformatear. El facturador solo lo conserva 7 días tras la aceptación.
+  cdr                         String?
+  impresion                   Int          @default(1)
+
+  // Pagos parciales por plan (ver modelo Plan): las NOTA_VENTA de abono y el
+  // comprobante final consolidador comparten el mismo planId.
+  cuentaParaCierre   Boolean   @default(true)
+  plan               Plan?     @relation(fields: [planId], references: [id])
+  planId             String?
+  // Solo se usa en las notas de venta absorbidas por el comprobante final del plan:
+  // apunta a la Factura (BOLETA/FACTURA) que las consolidó, para no duplicar su monto en reportes.
+  comprobanteFinal   Factura?  @relation("PlanNotaAbsorbida", fields: [comprobanteFinalId], references: [id])
+  comprobanteFinalId String?
+  notasAbsorbidas    Factura[] @relation("PlanNotaAbsorbida")
+
+  @@index([planId])
+}
+
+enum FacturaTipo {
+  BOLETA
+  FACTURA
+  NOTA_VENTA
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TARJETA
+  YAPE
+  PLIN
+  TRANSFERENCIA
+  DEPOSITO
+  MIXTO
+}
+
+enum PlanEstado {
+  ABIERTO
+  CERRADO
+}
+
+// Plan de sesiones pagado en abonos (montos irregulares). Cada abono genera una
+// Factura tipo NOTA_VENTA vinculada (planId); al completar el pago se emite un
+// comprobante final (BOLETA/FACTURA) que consolida los abonos seleccionados.
+model Plan {
+  id            String       @id @default(uuid())
+  paciente      Paciente     @relation(fields: [pacienteId], references: [id])
+  pacienteId    String
+  tratamiento   Tratamiento? @relation(fields: [tratamientoId], references: [id])
+  tratamientoId String?
+  nombre        String
+  sesionesTotal Int
+  precioTotal   Float
+  estado        PlanEstado   @default(ABIERTO)
+  activo        Boolean      @default(true)
+  usuario       User?        @relation(fields: [usuarioId], references: [id])
+  usuarioId     String?
+  creadoAt      DateTime     @default(now())
+  cerradoAt     DateTime?
+  facturas      Factura[]
+  sesiones      PlanSesion[]
+  items         PlanItem[]
+
+  @@index([pacienteId])
+}
+
+// Registro de cada sesión que el paciente va tomando dentro de un Plan (independiente de los
+// abonos: el pago y el avance de sesiones no siempre van a la par).
+// Línea del plan de tratamiento: qué se hará, en qué pieza y a qué precio acordado.
+model PlanItem {
+  id            String       @id @default(uuid())
+  plan          Plan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId        String
+  tratamiento   Tratamiento? @relation(fields: [tratamientoId], references: [id])
+  tratamientoId String?
+  descripcion   String
+  pieza         Int?
+  cantidad      Int          @default(1)
+  precioUnit    Float
+  realizado     Boolean      @default(false)
+  realizadoAt   DateTime?
+  orden         Int          @default(0)
+
+  @@index([planId])
+}
+
+model PlanSesion {
+  id        String   @id @default(uuid())
+  plan      Plan     @relation(fields: [planId], references: [id])
+  planId    String
+  numero    Int
+  fecha     DateTime @default(now())
+  notas     String?
+  usuario   User?    @relation(fields: [usuarioId], references: [id])
+  usuarioId String?
+  creadoAt  DateTime @default(now())
+
+  @@index([planId])
+}
+
+model FacturaItem {
+  id             String    @id @default(uuid())
+  factura        Factura   @relation(fields: [facturaId], references: [id])
+  facturaId      String
+  nombre         String
+  cantidad       Int
+  precioUnit     Float
+  total          Float
+  // Precio del catálogo (Tratamiento.precio / Producto.precioVenta) al momento de facturar.
+  // Se compara contra precioUnit para evidenciar un cambio de precio base en los reportes.
+  precioCatalogo Float?
+  codigoProducto String?
+  igv            Float?
+  decCantidad    Float?
+  decSubtotal    Float?
+  decTotal       Float?
+  valor          Float?
+  precio         Float?
+  igvVenta       Float?
+  codigo         Int?
+  producto       Producto? @relation(fields: [productoId], references: [id])
+  productoId     String?
+}
+
+model CierreTurno {
+  id                 String    @id @default(uuid())
+  usuario            User      @relation(fields: [usuarioId], references: [id])
+  usuarioId          String
+  fechaInicio        DateTime
+  fechaFin           DateTime
+  totalVentas        Float
+  totalEfectivo      Float
+  totalTarjeta       Float
+  totalYape          Float
+  totalTransferencia Float     @default(0)
+  totalDeposito      Float     @default(0)
+  // Suma de gastos (comisiones pagadas al momento) asignados a este cierre.
+  totalGastos        Float     @default(0)
+  activo             Boolean   @default(true)
+  creadoAt           DateTime  @default(now())
+  facturas           Factura[]
+  gastos             Gasto[]
+}
+
+model Configuracion {
+  id                    String   @id @default("default")
+  nombreEmpresa         String   @default("HubDental Consultorio Odontológico")
+  telefono              String?
+  email                 String?
+  pieDocumentos         String?
+  ruc                   String?  @db.VarChar(11)
+  razonSocial           String?
+  direccionFiscal       String?
+  codigoUbigeo          String?
+  googleCalendarActivo  Boolean  @default(false)
+  googleCalendarId      String?
+  googleRefreshTokenEnc String?
+  googleCuentaEmail     String?
+  googleSyncToken       String?
+  facturacionEndpoint   String?
+  facturacionActivo     Boolean  @default(false)
+  horasExpiracionCita   Int      @default(24)
+  usaConsultorios       Boolean  @default(true)
+  actualizadoAt         DateTime @updatedAt
+}
+
+model Serie {
+  id              String  @id @default(uuid())
+  codigoProposito String  @db.VarChar(50)
+  tipoComprobante String  @db.VarChar(2)
+  serie           String  @db.VarChar(3)
+  estado          Int     @default(1)
+  descripcion     String? @db.VarChar(200)
+}
+
+// Gasto/compra registrado por el gerente (solo rol SUPERVISOR), usado para el reporte mensual
+// de ingresos vs. gastos.
+model Gasto {
+  id                String       @id @default(uuid())
+  concepto          String
+  categoria         String?
+  monto             Float
+  fecha             DateTime
+  proveedor         String?
+  numeroComprobante String?
+  notas             String?
+  usuario           User?        @relation(fields: [usuarioId], references: [id])
+  usuarioId         String?
+  activo            Boolean      @default(true)
+  creadoAt          DateTime     @default(now())
+  // Comisión pagada a una odontologo (categoria "Comisiones"); se asigna al próximo cierre.
+  odontologo        User?        @relation("GastoOdontologo", fields: [odontologoId], references: [id])
+  odontologoId      String?
+  cierreTurno       CierreTurno? @relation(fields: [cierreTurnoId], references: [id], onDelete: SetNull)
+  cierreTurnoId     String?
+
+  @@index([fecha])
+  @@index([cierreTurnoId])
+}
+
+model Correlativo {
+  id            String   @id @default(uuid())
+  tipoDocumento String   @db.VarChar(2)
+  serie         String   @db.VarChar(3)
+  prefijo       String   @db.VarChar(2)
+  numeracion    Int      @default(0)
+  estado        String   @default("A") @db.Char(1)
+  ruc           String   @db.VarChar(11)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([ruc, tipoDocumento, serie, prefijo])
+}
+
+// ───────────────────────────── Expediente clínico ─────────────────────────────
+
+// Anamnesis / historia clínica general del paciente (una por paciente).
+model HistoriaClinica {
+  id                        String   @id @default(uuid())
+  paciente                  Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  pacienteId                String   @unique
+  motivoConsulta            String?
+  enfermedadActual          String?
+  // Checklist de antecedentes médicos: { diabetes: true, hipertension: false, ... }
+  antecedentes              Json?
+  medicamentosActuales      String?
+  alergias                  String?
+  antecedentesOdontologicos String?
+  habitos                   String?
+  examenClinico             String?
+  observaciones             String?
+  actualizadoPorId          String?
+  creadoAt                  DateTime @default(now())
+  actualizadoAt             DateTime @updatedAt
+}
+
+enum HallazgoEstado {
+  EXISTENTE
+  PLANIFICADO
+  REALIZADO
+}
+
+// Cada fila es un hallazgo del odontograma (notación FDI). superficie nula = pieza completa.
+model OdontogramaHallazgo {
+  id           String         @id @default(uuid())
+  paciente     Paciente       @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  pacienteId   String
+  pieza        Int
+  superficie   String?
+  condicion    String
+  estado       HallazgoEstado @default(EXISTENTE)
+  notas        String?
+  atencion     Atencion?      @relation(fields: [atencionId], references: [id], onDelete: SetNull)
+  atencionId   String?
+  odontologo   User?          @relation(fields: [odontologoId], references: [id])
+  odontologoId String?
+  activo       Boolean        @default(true)
+  creadoAt     DateTime       @default(now())
+
+  @@index([pacienteId, pieza])
+}
+
+// Nota de evolución de una visita (formato SOAP simplificado). Puede generar la próxima cita.
+model Evolucion {
+  id            String    @id @default(uuid())
+  paciente      Paciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  pacienteId    String
+  atencion      Atencion? @relation(fields: [atencionId], references: [id], onDelete: SetNull)
+  atencionId    String?
+  odontologo    User      @relation(fields: [odontologoId], references: [id])
+  odontologoId  String
+  fecha         DateTime  @default(now())
+  motivo        String?
+  diagnostico   String?
+  procedimiento String
+  indicaciones  String?
+  piezas        String?
+  proximaCita   Cita?     @relation(fields: [proximaCitaId], references: [id], onDelete: SetNull)
+  proximaCitaId String?
+  creadoAt      DateTime  @default(now())
+
+  @@index([pacienteId, fecha])
+}
+
+// ───────────────────────────── Documentos ─────────────────────────────
+
+enum DocumentoTipo {
+  CONSENTIMIENTO
+  RECETA
+  PRESUPUESTO
+  OTRO
+}
+
+enum DocumentoEstado {
+  BORRADOR
+  EMITIDO
+  FIRMADO
+  ANULADO
+}
+
+// Plantilla reutilizable. contenido admite variables {{paciente}}, {{dni}}, {{fecha}}, {{odontologo}}...
+// y campos propios declarados en `campos`: [{ clave, label, tipo: 'texto'|'area'|'fecha'|'numero' }].
+model DocumentoPlantilla {
+  id         String        @id @default(uuid())
+  tipo       DocumentoTipo
+  nombre     String
+  contenido  String
+  campos     Json?
+  activo     Boolean       @default(true)
+  sistema    Boolean       @default(false)
+  creadoAt   DateTime      @default(now())
+  documentos Documento[]
+}
+
+// Documento ya llenado para un paciente. `datos` guarda la parte estructurada
+// (medicamentos de la receta, líneas del presupuesto, valores de los campos de la plantilla).
+model Documento {
+  id           String              @id @default(uuid())
+  numero       String              @unique
+  tipo         DocumentoTipo
+  titulo       String
+  paciente     Paciente            @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  pacienteId   String
+  plantilla    DocumentoPlantilla? @relation(fields: [plantillaId], references: [id], onDelete: SetNull)
+  plantillaId  String?
+  odontologo   User?               @relation(fields: [odontologoId], references: [id])
+  odontologoId String?
+  atencion     Atencion?           @relation(fields: [atencionId], references: [id], onDelete: SetNull)
+  atencionId   String?
+  contenido    String
+  datos        Json?
+  total        Float?
+  estado       DocumentoEstado     @default(EMITIDO)
+  firmadoAt    DateTime?
+  creadoAt     DateTime            @default(now())
+
+  @@index([pacienteId, creadoAt])
+  @@index([tipo])
+}
+
+// Contador atómico para numerar documentos (REC-000001, PRE-000001, CON-000001).
+model Secuencia {
+  id    String @id
+  valor Int    @default(0)
+}
