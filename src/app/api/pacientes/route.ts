@@ -4,6 +4,22 @@ import { requireApiAuth } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
+/** RUC peruano: 11 dígitos, prefijo 10/15/16/17/20 y dígito verificador módulo 11 (SUNAT rechaza los que no cumplen). */
+function rucValido(ruc: string): boolean {
+  if (!/^(10|15|16|17|20)\d{9}$/.test(ruc)) return false
+  const pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+  const suma = pesos.reduce((acc, p, i) => acc + p * Number(ruc[i]), 0)
+  return (11 - (suma % 11)) % 10 === Number(ruc[10])
+}
+
+function errorRuc(body: Record<string, unknown>) {
+  const ruc = typeof body.ruc === 'string' ? body.ruc.trim() : ''
+  if (ruc && !rucValido(ruc)) {
+    return NextResponse.json({ error: 'RUC inválido: debe tener 11 dígitos reales (SUNAT rechaza RUC inexistentes al enviar el comprobante)' }, { status: 400 })
+  }
+  return null
+}
+
 export async function GET() {
   const guard = await requireApiAuth()
   if (guard) return guard
@@ -39,6 +55,8 @@ export async function POST(req: Request) {
   const guard = await requireApiAuth()
   if (guard) return guard
   const body = await req.json()
+  const rucError = errorRuc(body)
+  if (rucError) return rucError
 
   const dni = typeof body.dni === 'string' ? body.dni.trim() : ''
   if (dni) {
@@ -63,6 +81,8 @@ export async function PUT(req: Request) {
   const guard = await requireApiAuth()
   if (guard) return guard
   const body = await req.json()
+  const rucError = errorRuc(body)
+  if (rucError) return rucError
 
   if (!body.id) {
     return NextResponse.json({ error: 'ID requerido' }, { status: 400 })
