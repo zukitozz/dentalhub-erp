@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { enviarComprobante, obtenerCdr } from '@/lib/facturador'
+import { enviarComprobanteWhatsapp } from '@/lib/whatsapp'
 
 export async function enviarFacturaASunat(facturaId: string) {
   const factura = await prisma.factura.findUnique({
@@ -12,7 +13,7 @@ export async function enviarFacturaASunat(facturaId: string) {
     const resultado = await enviarComprobante(factura)
     // El CDR puede no venir en el POST (SUNAT aún no responde): se reintenta luego en sincronizarCdrPendientes.
     const cdr = resultado.cdr ?? (resultado.exito && factura.tipoComprobante !== '03' ? await obtenerCdr(factura.tipoComprobante!, factura.numeracionComprobante!).catch(() => null) : null)
-    return prisma.factura.update({
+    const actualizada = await prisma.factura.update({
       where: { id: factura.id },
       data: {
         enviado: resultado.exito,
@@ -27,6 +28,9 @@ export async function enviarFacturaASunat(facturaId: string) {
       },
       include: { paciente: true, items: true },
     })
+    // Aviso por WhatsApp: extra fuera de la emisión; nunca lanza ni altera el resultado de SUNAT.
+    if (resultado.exito) await enviarComprobanteWhatsapp(factura.id)
+    return actualizada
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : 'Error desconocido al enviar a SUNAT'
     return prisma.factura.update({

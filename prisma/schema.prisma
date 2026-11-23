@@ -394,6 +394,7 @@ model Factura {
   comprobanteFinal   Factura?  @relation("PlanNotaAbsorbida", fields: [comprobanteFinalId], references: [id])
   comprobanteFinalId String?
   notasAbsorbidas    Factura[] @relation("PlanNotaAbsorbida")
+  enviosWhatsapp     EnvioWhatsapp[]
 
   @@index([planId])
 }
@@ -542,6 +543,23 @@ model Configuracion {
   horasExpiracionCita   Int      @default(24)
   usaConsultorios       Boolean  @default(true)
   actualizadoAt         DateTime @updatedAt
+}
+
+// Registro de avisos de comprobante por WhatsApp (servicio de notificaciones). ENVIADO = aceptado por Meta, no entregado.
+model EnvioWhatsapp {
+  id                String   @id @default(uuid())
+  factura           Factura  @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  facturaId         String
+  referenciaExterna String   @unique @db.VarChar(100)
+  solicitudId       String?
+  telefono          String
+  // PENDIENTE (en cola), ENVIADO, FALLIDO, RECHAZADO, ERROR (no se pudo pedir a la API)
+  estado            String   @default("PENDIENTE")
+  error             String?
+  creadoAt          DateTime @default(now())
+  actualizadoAt     DateTime @updatedAt
+
+  @@index([facturaId])
 }
 
 model Serie {

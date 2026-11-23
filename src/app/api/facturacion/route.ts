@@ -29,7 +29,7 @@ export async function GET(req: Request) {
   const fecha = new URL(req.url).searchParams.get('fecha') || hoyPeru()
   const facturas = await prisma.factura.findMany({
     where: { activo: true, fechaHora: rangoDiaPeru(fecha) },
-    include: { paciente: true, items: true },
+    include: { paciente: true, items: true, enviosWhatsapp: { orderBy: { creadoAt: 'desc' }, take: 1 } },
     orderBy: { creadoAt: 'desc' },
   })
 

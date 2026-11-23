@@ -20,6 +20,7 @@ interface Paciente {
   ruc?: string | null
   carnetExtranjeria?: string | null
   razonSocial?: string | null
+  celular?: string | null
 }
 
 interface Producto {
@@ -68,6 +69,7 @@ interface Factura {
   enviado: boolean
   errors: string | null
   url: string | null
+  enviosWhatsapp?: { estado: string; error: string | null; telefono: string }[]
   fechaHora: string | null
   montoLetras: string | null
   gravadas: number | null
@@ -157,6 +159,7 @@ function FacturacionContent() {
   const [submitting, setSubmitting] = useState(false)
   const [guardandoPendiente, setGuardandoPendiente] = useState(false)
   const [reenviandoId, setReenviandoId] = useState<string | null>(null)
+  const [whatsappId, setWhatsappId] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     pacienteId: searchParams.get('pacienteId') || '',
@@ -332,6 +335,20 @@ function FacturacionContent() {
                           className="rounded-full border border-ink-300 px-4 py-1.5 text-xs font-bold text-ink-700 transition hover:bg-ink-100"
                         >
                           Reimprimir
+                        </button>
+                      )}
+                      {factura.enviado && (
+                        <button
+                          type="button"
+                          disabled={whatsappId === factura.id}
+                          title={factura.enviosWhatsapp?.[0] ? `WhatsApp: ${factura.enviosWhatsapp[0].estado}${factura.enviosWhatsapp[0].error ? ` - ${factura.enviosWhatsapp[0].error}` : ''}` : 'Enviar el comprobante por WhatsApp'}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void handleWhatsapp(factura)
+                          }}
+                          className="rounded-full border border-ink-300 px-4 py-1.5 text-xs font-bold text-ink-700 transition hover:bg-ink-100 disabled:opacity-50"
+                        >
+                          {whatsappId === factura.id ? 'Enviando...' : factura.enviosWhatsapp?.[0] ? 'Reenviar WhatsApp' : 'Enviar WhatsApp'}
                         </button>
                       )}
                       {!factura.enviado && factura.tipo !== 'NOTA_VENTA' && (
@@ -618,6 +635,29 @@ function FacturacionContent() {
 
     if (data && puedeImprimirTicket(data.tipo)) {
       await imprimirTicket(data, empresa)
+    }
+  }
+
+  const handleWhatsapp = async (factura: Factura) => {
+    const sugerido = factura.enviosWhatsapp?.[0]?.telefono || factura.paciente.celular || ''
+    const telefono = window.prompt('Celular del cliente para enviar el comprobante por WhatsApp', sugerido)
+    if (telefono === null) return
+    setWhatsappId(factura.id)
+    try {
+      const response = await fetch('/api/facturacion/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ facturaId: factura.id, telefono }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        toast.error(data?.error || 'No se pudo enviar por WhatsApp')
+        return
+      }
+      toast.success('Comprobante enviado a la cola de WhatsApp')
+      await loadData()
+    } finally {
+      setWhatsappId(null)
     }
   }
 
