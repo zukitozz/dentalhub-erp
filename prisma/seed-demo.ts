@@ -50,7 +50,7 @@ async function main() {
     await prisma.paciente.createMany({
       data: [
         { nombre: 'Ana Martínez Quispe', dni: '45879632', celular: '987654321', distrito: 'Miraflores', fechaNacimiento: new Date('1990-10-14T12:00:00-05:00'), sexo: 'F' },
-        { nombre: 'Luis Paredes Soto', dni: '40123987', celular: '954321876', distrito: 'San Isidro', fechaNacimiento: new Date('1985-03-02T12:00:00-05:00'), sexo: 'M', alergias: 'Penicilina' },
+        { nombre: 'Luis Paredes Soto', dni: '40123987', ruc: '20100070970', razonSocial: 'Paredes Soto Servicios S.A.C.', celular: '954321876', distrito: 'San Isidro', fechaNacimiento: new Date('1985-03-02T12:00:00-05:00'), sexo: 'M', alergias: 'Penicilina' },
         { nombre: 'Mateo Flores Díaz', dni: '75412036', celular: '912345678', distrito: 'Surco', fechaNacimiento: new Date('2016-07-21T12:00:00-05:00'), sexo: 'M', apoderado: 'Rosa Díaz (madre)' },
       ],
     })

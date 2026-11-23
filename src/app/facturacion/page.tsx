@@ -8,7 +8,7 @@ import { Spinner } from '@/components/Spinner'
 import { Pagination } from '@/components/Pagination'
 import { useToast } from '@/components/Toast'
 import { useConfirm } from '@/components/ConfirmDialog'
-import { imprimirTicket, puedeImprimirTicket, type TicketEmpresaInfo } from '@/lib/ticket'
+import { imprimirTicket, puedeImprimirTicket, verComprobantePdf, type TicketEmpresaInfo } from '@/lib/ticket'
 import { SearchSelect } from '@/components/SearchSelect'
 
 const FACTURAS_PAGE_SIZE = 10
@@ -308,18 +308,19 @@ function FacturacionContent() {
                   </td>
                   <td className="py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      {factura.enviado && factura.url ? (
-                        <a
-                          href={factura.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(event) => event.stopPropagation()}
+                      {puedeImprimirTicket(factura.tipo) ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void verComprobantePdf(factura, empresa)
+                          }}
                           className="rounded-full border border-brand-700 px-4 py-1.5 text-xs font-bold text-brand-700 transition hover:bg-brand-700 hover:text-white"
                         >
                           Ver PDF
-                        </a>
+                        </button>
                       ) : (
-                        !puedeImprimirTicket(factura.tipo) && <span className="text-ink-400">—</span>
+                        <span className="text-ink-400">—</span>
                       )}
                       {puedeImprimirTicket(factura.tipo) && (
                         <button
