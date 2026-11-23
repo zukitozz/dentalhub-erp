@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import { enviarComprobante, obtenerCdr } from '@/lib/facturador'
-import { enviarComprobanteWhatsapp } from '@/lib/whatsapp'
 
 export async function enviarFacturaASunat(facturaId: string) {
   const factura = await prisma.factura.findUnique({
@@ -28,8 +27,6 @@ export async function enviarFacturaASunat(facturaId: string) {
       },
       include: { paciente: true, items: true },
     })
-    // Aviso por WhatsApp: extra fuera de la emisión; nunca lanza ni altera el resultado de SUNAT.
-    if (resultado.exito) await enviarComprobanteWhatsapp(factura.id)
     return actualizada
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : 'Error desconocido al enviar a SUNAT'

@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   }
   const envio = await enviarComprobanteWhatsapp(body.facturaId, { reenvio: true, telefono })
   if (!envio) {
-    return NextResponse.json({ error: 'No se pudo enviar: el comprobante debe estar aceptado por SUNAT y el paciente debe tener un celular válido' }, { status: 400 })
+    return NextResponse.json({ error: 'No se pudo enviar: debe ser boleta o factura y el celular debe ser válido' }, { status: 400 })
   }
   if (envio.estado === 'ERROR') return NextResponse.json({ error: envio.error, envio }, { status: 502 })
   return NextResponse.json(envio)

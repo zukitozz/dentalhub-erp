@@ -358,6 +358,8 @@ model Factura {
   cadenaParaCodigoQr          String?
   codigoHash                  String?
   pdfBytes                    String?
+  // Key en S3 del PDF del comprobante (se crea al emitir o la primera vez que se visualiza).
+  pdfKey                      String?
   url                         String?
   errors                      String?
   comentario                  String?

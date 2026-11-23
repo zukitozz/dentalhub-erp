@@ -3,6 +3,7 @@ import { obtenerCorrelativo, resolverPrefijo } from '@/lib/correlativos'
 import { numeroALetras } from '@/lib/numeroALetras'
 import { CODIGO_SUNAT_TIPO_COMPROBANTE, TIPO_DOCUMENTO_CORRELATIVO } from '@/lib/comprobantes'
 import { enviarFacturaASunat } from '@/lib/enviarFactura'
+import { asegurarPdfComprobante } from '@/lib/comprobantePdf'
 import type { MetodoPago } from '@/generated/prisma/client'
 
 const IGV_PORCENTAJE = Number(process.env.IGV_PORCENTAJE || '18')
@@ -84,7 +85,7 @@ export async function registrarAbono(params: { planId: string; monto: number; me
   const gravadas = round2(monto / (1 + IGV_PORCENTAJE / 100))
   const igv = round2(monto - gravadas)
 
-  return prisma.$transaction(async (tx) => {
+  const abono = await prisma.$transaction(async (tx) => {
     const prefijo = resolverPrefijo(tipoDocumento)
     const numeracionComprobante = await obtenerCorrelativo(tx, {
       ruc: configuracion.ruc!,
@@ -119,6 +120,8 @@ export async function registrarAbono(params: { planId: string; monto: number; me
       include: { paciente: true, items: true },
     })
   })
+  await asegurarPdfComprobante(abono.id)
+  return abono
 }
 
 export async function emitirComprobanteFinal(params: {
@@ -220,5 +223,6 @@ export async function emitirComprobanteFinal(params: {
     return creada
   })
 
+  await asegurarPdfComprobante(factura.id)
   return (await enviarFacturaASunat(factura.id)) ?? factura
 }

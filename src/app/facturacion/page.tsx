@@ -8,7 +8,7 @@ import { Spinner } from '@/components/Spinner'
 import { Pagination } from '@/components/Pagination'
 import { useToast } from '@/components/Toast'
 import { useConfirm } from '@/components/ConfirmDialog'
-import { imprimirTicket, puedeImprimirTicket, verComprobantePdf, type TicketEmpresaInfo } from '@/lib/ticket'
+import { imprimirTicket, puedeImprimirTicket, type TicketEmpresaInfo } from '@/lib/ticket'
 import { SearchSelect } from '@/components/SearchSelect'
 
 const FACTURAS_PAGE_SIZE = 10
@@ -36,6 +36,9 @@ interface Tratamiento {
   precio: number
   activo: boolean
 }
+
+// Reenvío por WhatsApp solo durante la etapa de demo (NEXT_PUBLIC_DEMO_WHATSAPP=true).
+const DEMO_WHATSAPP = process.env.NEXT_PUBLIC_DEMO_WHATSAPP === 'true'
 
 interface FacturaItemForm {
   id: string
@@ -159,6 +162,7 @@ function FacturacionContent() {
   const [submitting, setSubmitting] = useState(false)
   const [guardandoPendiente, setGuardandoPendiente] = useState(false)
   const [reenviandoId, setReenviandoId] = useState<string | null>(null)
+  const [pdfId, setPdfId] = useState<string | null>(null)
   const [whatsappId, setWhatsappId] = useState<string | null>(null)
 
   const [form, setForm] = useState({
@@ -311,20 +315,17 @@ function FacturacionContent() {
                   </td>
                   <td className="py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      {puedeImprimirTicket(factura.tipo) ? (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            void verComprobantePdf(factura, empresa)
-                          }}
-                          className="rounded-full border border-brand-700 px-4 py-1.5 text-xs font-bold text-brand-700 transition hover:bg-brand-700 hover:text-white"
-                        >
-                          Ver PDF
-                        </button>
-                      ) : (
-                        <span className="text-ink-400">—</span>
-                      )}
+                      <button
+                        type="button"
+                        disabled={pdfId === factura.id}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void handleVerPdf(factura.id)
+                        }}
+                        className="rounded-full border border-brand-700 px-4 py-1.5 text-xs font-bold text-brand-700 transition hover:bg-brand-700 hover:text-white disabled:opacity-50"
+                      >
+                        {pdfId === factura.id ? 'Generando...' : 'Ver PDF'}
+                      </button>
                       {puedeImprimirTicket(factura.tipo) && (
                         <button
                           type="button"
@@ -337,7 +338,7 @@ function FacturacionContent() {
                           Reimprimir
                         </button>
                       )}
-                      {factura.enviado && (
+                      {DEMO_WHATSAPP && puedeImprimirTicket(factura.tipo) && (
                         <button
                           type="button"
                           disabled={whatsappId === factura.id}
@@ -635,6 +636,25 @@ function FacturacionContent() {
 
     if (data && puedeImprimirTicket(data.tipo)) {
       await imprimirTicket(data, empresa)
+    }
+  }
+
+  const handleVerPdf = async (facturaId: string) => {
+    // Se abre la pestaña de inmediato (un popup tras un fetch lo bloquea el navegador).
+    const ventana = window.open('', '_blank')
+    setPdfId(facturaId)
+    try {
+      const response = await fetch(`/api/facturacion/pdf?facturaId=${encodeURIComponent(facturaId)}`)
+      const data = await response.json().catch(() => null)
+      if (!response.ok || !data?.url) {
+        ventana?.close()
+        toast.error(data?.error || 'No se pudo generar el PDF del comprobante')
+        return
+      }
+      if (ventana) ventana.location.href = data.url
+      else window.location.href = data.url
+    } finally {
+      setPdfId(null)
     }
   }
 

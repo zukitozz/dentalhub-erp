@@ -1,15 +1,8 @@
 import { prisma } from '@/lib/prisma'
-import { generarPdfComprobante } from '@/lib/pdfComprobante'
-import { subirPdfComprobante } from '@/lib/storage'
+import { urlPdfComprobante } from '@/lib/comprobantePdf'
 
 // Cliente del servicio de notificaciones por WhatsApp. Es un extra: nunca debe romper la emisión del comprobante.
 const TIPO_TEXTO: Record<string, string> = { '01': 'factura', '03': 'boleta', '07': 'nota de crédito', '08': 'nota de débito' }
-const TIPO_TITULO: Record<string, string> = {
-  '01': 'FACTURA ELECTRÓNICA',
-  '03': 'BOLETA DE VENTA ELECTRÓNICA',
-  '07': 'NOTA DE CRÉDITO ELECTRÓNICA',
-  '08': 'NOTA DE DÉBITO ELECTRÓNICA',
-}
 const TIMEOUT_MS = 10_000
 
 export function whatsappConfigurado() {
@@ -85,7 +78,7 @@ export async function enviarComprobanteWhatsapp(facturaId: string, opciones: { r
 async function enviar(facturaId: string, opciones: { reenvio?: boolean; telefono?: string }) {
   if (!whatsappConfigurado()) return null
   const factura = await prisma.factura.findUnique({ where: { id: facturaId }, include: { paciente: true, items: true } })
-  if (!factura || !factura.enviado || !factura.numeracionComprobante || !factura.tipoComprobante) return null
+  if (!factura || !factura.numeracionComprobante || !factura.tipoComprobante) return null
   if (!TIPO_TEXTO[factura.tipoComprobante] || factura.total <= 0) return null
   const telefono = normalizarTelefono(opciones.telefono ?? factura.paciente.celular)
   if (!telefono) return null
@@ -106,21 +99,8 @@ async function enviar(facturaId: string, opciones: { reenvio?: boolean; telefono
     const fecha = factura.fechaHora || factura.fechaEmision || factura.creadoAt
     const p = factura.paciente
     const nombrePdf = `${TIPO_TEXTO[factura.tipoComprobante].replace(/ /g, '_')}_${factura.numeracionComprobante}.pdf`
-    const pdf = generarPdfComprobante({
-      empresa: config?.razonSocial || negocio,
-      ruc: factura.ruc,
-      tipo: TIPO_TITULO[factura.tipoComprobante],
-      numero: factura.numeracionComprobante,
-      fecha: fecha.toLocaleString('es-PE', { timeZone: 'America/Lima' }),
-      cliente: (p.ruc && p.razonSocial) || p.nombre,
-      documento: p.ruc ? `RUC: ${p.ruc}` : p.dni ? `DNI: ${p.dni}` : null,
-      items: factura.items.map((i) => ({ texto: `${i.cantidad} x ${i.nombre}`, total: i.total })),
-      gravadas: factura.gravadas,
-      igv: factura.igv,
-      total: factura.total,
-      montoLetras: factura.montoLetras,
-    })
-    const adjuntoUrl = await subirPdfComprobante(nombrePdf, pdf)
+    const adjuntoUrl = await urlPdfComprobante(facturaId)
+    if (!adjuntoUrl) throw new Error('No se pudo generar el PDF del comprobante')
     const nombre = p.nombre.split(/\s+/)[0] || 'cliente'
 
     const res = await llamar('/v1/envios', 'POST', {

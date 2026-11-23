@@ -70,9 +70,9 @@ export async function presignarProductos<T extends { imagenUrl: string | null }>
   return Promise.all(productos.map(presignarProducto))
 }
 
-/** Sube un PDF de comprobante y devuelve una URL https firmada (mínimo 1 hora: el flujo de WhatsApp es asíncrono). */
-export async function subirPdfComprobante(nombre: string, pdf: Buffer, segundos = 60 * 60 * 2): Promise<string> {
+/** Sube el PDF de un comprobante y devuelve su key en S3 (las lecturas se sirven con urlFirmada). */
+export async function subirPdfComprobante(nombre: string, pdf: Buffer): Promise<string> {
   const key = `comprobantes/${randomUUID()}/${nombre}`
   await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: pdf, ContentType: 'application/pdf' }))
-  return getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: key }), { expiresIn: segundos })
+  return key
 }

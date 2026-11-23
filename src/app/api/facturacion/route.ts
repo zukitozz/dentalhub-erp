@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth'
 import { obtenerCorrelativo, resolverPrefijo } from '@/lib/correlativos'
 import { numeroALetras } from '@/lib/numeroALetras'
 import { enviarFacturaASunat } from '@/lib/enviarFactura'
+import { asegurarPdfComprobante } from '@/lib/comprobantePdf'
 import { CODIGO_SUNAT_TIPO_COMPROBANTE, TIPO_DOCUMENTO_CORRELATIVO } from '@/lib/comprobantes'
 import { hoyPeru, rangoDiaPeru } from '@/lib/fechas'
 import { resolverPagosFactura } from '@/lib/pagos'
@@ -286,6 +287,9 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ error: 'No se pudo registrar la factura. Intenta nuevamente.' }, { status: 500 })
   }
+
+  // El PDF se crea siempre al emitir, sin depender del resultado en SUNAT.
+  await asegurarPdfComprobante(factura.id)
 
   const facturaFinal = factura.tipo === 'NOTA_VENTA' ? factura : (await enviarFacturaASunat(factura.id)) ?? factura
 

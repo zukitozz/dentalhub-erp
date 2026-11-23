@@ -195,15 +195,3 @@ export async function imprimirTicket(factura: TicketFacturaInfo, empresa: Ticket
   }
   iframe.onload = () => setTimeout(disparar, 150)
 }
-
-/** Abre el comprobante en una pestaña nueva y lanza el diálogo de impresión (elige "Guardar como PDF"). */
-export async function verComprobantePdf(factura: TicketFacturaInfo, empresa: TicketEmpresaInfo): Promise<void> {
-  if (typeof window === 'undefined' || !puedeImprimirTicket(factura.tipo)) return
-  const qrDataUrl = await QRCode.toDataURL(QR_GENERICO, { margin: 0, width: 260 })
-  const html = construirHtmlTicket(factura, empresa, qrDataUrl).replace('<title>Ticket</title>', `<title>${escapeHtml(factura.numeracionComprobante || 'Comprobante')}</title>`)
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
-  const ventana = window.open(url, '_blank')
-  if (!ventana) return
-  ventana.addEventListener('load', () => setTimeout(() => ventana.print(), 300))
-  setTimeout(() => URL.revokeObjectURL(url), 60_000)
-}
