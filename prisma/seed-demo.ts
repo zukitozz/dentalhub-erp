@@ -55,6 +55,83 @@ async function main() {
       ],
     })
   }
+  // Series de comprobantes habilitadas (el prefijo F/B/NV se resuelve aparte; aquí va el correlativo de 3 dígitos).
+  const SERIES = [
+    { tipoComprobante: '01', codigoProposito: 'FACTURA', serie: '001', descripcion: 'Facturas electrónicas (F001)' },
+    { tipoComprobante: '03', codigoProposito: 'BOLETA', serie: '001', descripcion: 'Boletas electrónicas (B001)' },
+    { tipoComprobante: '07', codigoProposito: 'NOTA_CREDITO', serie: '001', descripcion: 'Notas de crédito' },
+    { tipoComprobante: '08', codigoProposito: 'NOTA_DEBITO', serie: '001', descripcion: 'Notas de débito' },
+    { tipoComprobante: '50', codigoProposito: 'NOTA_DESPACHO', serie: '001', descripcion: 'Notas de despacho (ND)' },
+    { tipoComprobante: '51', codigoProposito: 'NOTA_VENTA', serie: '001', descripcion: 'Notas de venta / despacho' },
+  ]
+  for (const s of SERIES) {
+    const existe = await prisma.serie.findFirst({ where: { tipoComprobante: s.tipoComprobante, serie: s.serie } })
+    if (existe) await prisma.serie.update({ where: { id: existe.id }, data: { estado: 1 } })
+    else await prisma.serie.create({ data: { ...s, estado: 1 } })
+  }
+
+  const config = await prisma.configuracion.upsert({ where: { id: 'default' }, update: {}, create: { id: 'default' } })
+  if (!config.ruc) await prisma.configuracion.update({ where: { id: 'default' }, data: { ruc: '20123456789', razonSocial: 'HubDental S.A.C.' } })
+  const ruc = config.ruc ?? '20123456789'
+
+  // Citas, atenciones y comprobantes de ejemplo para hoy (solo si aún no hay citas de hoy).
+  const inicioDia = new Date()
+  inicioDia.setHours(0, 0, 0, 0)
+  const finDia = new Date(inicioDia.getTime() + 24 * 3600 * 1000)
+  const odontologo = await prisma.user.findUniqueOrThrow({ where: { email: 'odontologo@hubdental.pe' } })
+  const admin = await prisma.user.findUniqueOrThrow({ where: { email: 'recepcion@hubdental.pe' } })
+  const pacientes = await prisma.paciente.findMany({ take: 3, orderBy: { createdAt: 'asc' } })
+  const consultorios = await prisma.consultorio.findMany({ orderBy: { nombre: 'asc' } })
+  const trats = await prisma.tratamiento.findMany()
+  const trat = (n: string) => trats.find((t) => t.nombre.startsWith(n))!
+  const hoy = (h: number, m = 0) => new Date(inicioDia.getTime() + (h * 60 + m) * 60000)
+
+  if (pacientes.length === 3 && (await prisma.cita.count({ where: { fecha: { gte: inicioDia, lt: finDia } } })) === 0) {
+    const plan = [
+      { p: pacientes[0], t: 'Consulta', h: 9, estado: 'ATENDIDA' as const },
+      { p: pacientes[1], t: 'Profilaxis', h: 10, m: 30, estado: 'ATENDIDA' as const },
+      { p: pacientes[2], t: 'Control de ortodoncia', h: 12, estado: 'CONFIRMADA' as const },
+      { p: pacientes[0], t: 'Aplicación de flúor', h: 15, estado: 'PENDIENTE' as const },
+      { p: pacientes[1], t: 'Resina compuesta (1', h: 17, estado: 'PENDIENTE' as const },
+    ]
+    const citas = []
+    for (const c of plan) {
+      const t = trat(c.t)
+      citas.push(await prisma.cita.create({
+        data: { pacienteId: c.p.id, fecha: hoy(c.h, c.m ?? 0), tratamiento: t.nombre, duracionMin: t.duracionMin, odontologoId: odontologo.id, estado: c.estado, registrado: c.estado === 'ATENDIDA' },
+      }))
+    }
+
+    const comprobantes = [
+      { cita: citas[0], t: 'Consulta', tipo: 'BOLETA' as const, cod: '03', pref: 'B', metodo: 'EFECTIVO' as const },
+      { cita: citas[1], t: 'Profilaxis', tipo: 'FACTURA' as const, cod: '01', pref: 'F', metodo: 'TARJETA' as const },
+    ]
+    for (const [i, c] of comprobantes.entries()) {
+      const t = trat(c.t)
+      const precio = t.precio
+      const atencion = await prisma.atencion.create({
+        data: { pacienteId: c.cita.pacienteId!, citaId: c.cita.id, consultorioId: consultorios[i % Math.max(consultorios.length, 1)]?.id, horaInicio: c.cita.fecha, horaFin: new Date(c.cita.fecha.getTime() + (t.duracionMin ?? 30) * 60000) },
+      })
+      const corr = await prisma.correlativo.upsert({
+        where: { ruc_tipoDocumento_serie_prefijo: { ruc, tipoDocumento: c.cod, serie: '001', prefijo: c.pref } },
+        update: { numeracion: { increment: 1 } },
+        create: { ruc, tipoDocumento: c.cod, serie: '001', prefijo: c.pref, numeracion: 1 },
+      })
+      const gravadas = Math.round((precio / 1.18) * 100) / 100
+      const factura = await prisma.factura.create({
+        data: {
+          pacienteId: c.cita.pacienteId!, tipo: c.tipo, total: precio, metodoPago: c.metodo, estado: 'PAGADO', usuarioId: admin.id,
+          tipoComprobante: c.cod, numeracionComprobante: `${c.pref}001-${String(corr.numeracion).padStart(8, '0')}`,
+          fechaHora: c.cita.fecha, fechaEmision: c.cita.fecha, totalVenta: String(precio), gravadas, igv: Math.round((precio - gravadas) * 100) / 100,
+          ruc, pagoEfectivo: c.metodo === 'EFECTIVO' ? precio : null, pagoTarjeta: c.metodo === 'TARJETA' ? precio : null,
+          items: { create: [{ nombre: t.nombre, cantidad: 1, precioUnit: precio, total: precio, precioCatalogo: precio }] },
+        },
+      })
+      await prisma.atencionTratamiento.create({
+        data: { atencionId: atencion.id, tratamientoId: t.id, odontologoId: odontologo.id, estado: 'FINALIZADA', precio, precioCatalogo: precio, horaInicio: atencion.horaInicio, horaFin: atencion.horaFin, facturaId: factura.id },
+      })
+    }
+  }
   console.log('Datos de demostración listos (usuarios: odontologo@hubdental.pe / recepcion@hubdental.pe, clave Odontologo123!).')
 }
 
