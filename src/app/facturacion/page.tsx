@@ -326,18 +326,6 @@ function FacturacionContent() {
                       >
                         {pdfId === factura.id ? 'Generando...' : 'Ver PDF'}
                       </button>
-                      {puedeImprimirTicket(factura.tipo) && (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            void imprimirTicket(factura, empresa)
-                          }}
-                          className="rounded-full border border-ink-300 px-4 py-1.5 text-xs font-bold text-ink-700 transition hover:bg-ink-100"
-                        >
-                          Reimprimir
-                        </button>
-                      )}
                       {DEMO_WHATSAPP && puedeImprimirTicket(factura.tipo) && (
                         <button
                           type="button"
@@ -349,7 +337,7 @@ function FacturacionContent() {
                           }}
                           className="rounded-full border border-ink-300 px-4 py-1.5 text-xs font-bold text-ink-700 transition hover:bg-ink-100 disabled:opacity-50"
                         >
-                          {whatsappId === factura.id ? 'Enviando...' : factura.enviosWhatsapp?.[0] ? 'Reenviar WhatsApp' : 'Enviar WhatsApp'}
+                          {whatsappId === factura.id ? 'Enviando...' : 'Reenviar WSP'}
                         </button>
                       )}
                       {!factura.enviado && factura.tipo !== 'NOTA_VENTA' && (

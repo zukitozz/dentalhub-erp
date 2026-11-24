@@ -22,19 +22,28 @@ export async function asegurarPdfComprobante(facturaId: string): Promise<string 
     const config = await prisma.configuracion.findUnique({ where: { id: 'default' } })
     const p = factura.paciente
     const fecha = factura.fechaHora || factura.fechaEmision || factura.creadoAt
+    const esFactura = factura.tipo === 'FACTURA'
+    const docCliente = esFactura && p.ruc ? `RUC ${p.ruc}` : p.dni ? `DNI ${p.dni}` : p.carnetExtranjeria ? `CE ${p.carnetExtranjeria}` : p.ruc ? `RUC ${p.ruc}` : null
     const pdf = generarPdfComprobante({
       empresa: config?.razonSocial || config?.nombreEmpresa || 'HubDental',
+      nombreComercial: config?.nombreEmpresa,
       ruc: factura.ruc,
+      direccion: config?.direccionFiscal,
       tipo: TITULO[factura.tipo] ?? factura.tipo,
       numero: factura.numeracionComprobante || 'Sin numeración',
       fecha: fecha.toLocaleString('es-PE', { timeZone: 'America/Lima' }),
-      cliente: (factura.tipo === 'FACTURA' && p.ruc && p.razonSocial) || p.nombre,
-      documento: factura.tipo === 'FACTURA' && p.ruc ? `RUC: ${p.ruc}` : p.dni ? `DNI: ${p.dni}` : p.ruc ? `RUC: ${p.ruc}` : null,
-      items: factura.items.map((i) => ({ texto: `${i.cantidad} x ${i.nombre}`, total: i.total })),
+      cliente: (esFactura && p.ruc && p.razonSocial) || p.nombre,
+      documento: docCliente,
+      direccionCliente: p.direccion,
+      metodoPago: factura.metodoPago.charAt(0) + factura.metodoPago.slice(1).toLowerCase(),
+      items: factura.items.map((i) => ({ cantidad: i.cantidad, descripcion: i.nombre, precioUnit: i.precioUnit, total: i.total })),
       gravadas: factura.gravadas,
       igv: factura.igv,
       total: factura.total,
       montoLetras: factura.montoLetras,
+      qr: factura.cadenaParaCodigoQr,
+      hash: factura.codigoHash,
+      electronico: factura.tipo !== 'NOTA_VENTA',
     })
     const nombre = `${PREFIJO_ARCHIVO[factura.tipo] ?? 'comprobante'}_${factura.numeracionComprobante || factura.id}.pdf`
     const key = await subirPdfComprobante(nombre, pdf)
