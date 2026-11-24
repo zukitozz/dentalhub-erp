@@ -26,7 +26,7 @@ export async function GET() {
     listarAtencionesEnCurso(session.user.role, session.user.id, ctx?.sedeLectura),
     prisma.factura.aggregate({ where: { ...sede, creadoAt: { gte: start, lte: end }, activo: true }, _sum: { total: true } }),
     prisma.factura.aggregate({ where: { ...sede, creadoAt: { gte: start, lte: end }, estado: 'PENDIENTE', activo: true }, _sum: { total: true } }),
-    prisma.producto.count({ where: { stock: { lte: 5 } } }),
+    prisma.productoSede.count({ where: { ...sede, stock: { lte: 5 } } }),
   ])
 
   return NextResponse.json({

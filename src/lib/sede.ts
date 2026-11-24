@@ -69,3 +69,29 @@ export async function buscarSerie(tipoComprobante: string, sedeId: string | null
     (!sedeId ? await prisma.serie.findFirst({ where: { tipoComprobante, estado: 1 } }) : null)
   )
 }
+
+type StockClient = Pick<typeof prisma, 'productoSede'>
+
+/** Fila de stock de un producto en una sede (se crea en 0 si aún no existe). */
+export async function filaStock(client: StockClient, productoId: string, sedeId: string) {
+  return client.productoSede.upsert({
+    where: { productoId_sedeId: { productoId, sedeId } },
+    update: {},
+    create: { productoId, sedeId },
+  })
+}
+
+/** Stock y alerta por producto: de una sede, o la suma de todas si sedeId es null. */
+export async function mapaStock(sedeId: string | null) {
+  const filas = await prisma.productoSede.findMany({ where: sedeId ? { sedeId } : {} })
+  const mapa = new Map<string, { stock: number; alertaStock: number }>()
+  for (const f of filas) {
+    const actual = mapa.get(f.productoId)
+    mapa.set(f.productoId, { stock: (actual?.stock ?? 0) + f.stock, alertaStock: actual ? Math.max(actual.alertaStock, f.alertaStock) : f.alertaStock })
+  }
+  return mapa
+}
+
+export function conStock<T extends { id: string }>(productos: T[], mapa: Map<string, { stock: number; alertaStock: number }>) {
+  return productos.map((p) => ({ ...p, stock: mapa.get(p.id)?.stock ?? 0, alertaStock: mapa.get(p.id)?.alertaStock ?? 5 }))
+}

@@ -18,7 +18,6 @@ interface Settings {
   facturacionEndpoint: string | null
   facturacionActivo: boolean
   horasExpiracionCita: number
-  porcentajeReferido: number
   usaConsultorios: boolean
 }
 
@@ -37,7 +36,6 @@ const initialSettings: Settings = {
   facturacionEndpoint: '',
   facturacionActivo: false,
   horasExpiracionCita: 24,
-  porcentajeReferido: 5,
   usaConsultorios: true,
 }
 
@@ -126,12 +124,6 @@ export default function AjustesPage() {
             <h2 className="text-xl font-semibold text-brand-900">Consultorios físicas</h2>
             <p className="text-sm text-ink-600">Actívalo solo si el local cuenta con consultorios físicas que deben reservarse para cada atención. Si está apagado, las atenciones se registran directamente sobre el paciente.</p>
             <label className="flex items-center gap-3 text-sm text-ink-700"><input type="checkbox" checked={settings.usaConsultorios} onChange={(e) => setSettings({ ...settings, usaConsultorios: e.target.checked })} /> Usar consultorios físicas</label>
-          </div>
-          <div className="card-surface space-y-4">
-            <h2 className="text-xl font-semibold text-brand-900">Premios por recomendación</h2>
-            <p className="text-sm text-ink-600">Porcentaje de lo facturado en el mes por los pacientes recomendados que se premia a quien los recomendó (reporte en Finanzas).</p>
-            <label htmlFor="porcentaje-referido" className="text-sm font-medium text-ink-700">Porcentaje de premio (%)</label>
-            <input id="porcentaje-referido" type="number" min={0} max={100} step="0.5" value={settings.porcentajeReferido} onChange={(e) => setSettings({ ...settings, porcentajeReferido: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} className="field" />
           </div>
           <div className="card-surface space-y-4">
             <h2 className="text-xl font-semibold text-brand-900">Vigencia de citas</h2>

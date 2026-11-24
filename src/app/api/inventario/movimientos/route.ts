@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
 import { auth } from '@/lib/auth'
+import { filaStock, getSedeCtx } from '@/lib/sede'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,8 +18,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'productoId requerido' }, { status: 400 })
   }
 
+  const ctx = await getSedeCtx()
   const movimientos = await prisma.movimientoInventario.findMany({
-    where: { productoId },
+    where: { productoId, ...(ctx?.sedeLectura ? { sedeId: ctx.sedeLectura } : {}) },
     include: { usuario: { select: { id: true, name: true } } },
     orderBy: { creadoAt: 'desc' },
     take: 20,
@@ -52,12 +54,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'cantidad debe ser un número mayor o igual a 0' }, { status: 400 })
   }
 
+  const ctx = await getSedeCtx()
+  if (!ctx?.sedeLectura) {
+    return NextResponse.json({ error: 'Elige una sede en el selector para registrar movimientos de stock' }, { status: 400 })
+  }
+  const sedeId = ctx.sedeLectura
+
   try {
     const resultado = await prisma.$transaction(async (tx) => {
       const producto = await tx.producto.findUnique({ where: { id: productoId } })
       if (!producto) throw new Error('PRODUCTO_NO_ENCONTRADO')
+      const fila = await filaStock(tx, productoId, sedeId)
 
-      const stockAnterior = producto.stock
+      const stockAnterior = fila.stock
       let stockNuevo = stockAnterior
       if (tipo === 'ENTRADA') stockNuevo = stockAnterior + cantidad
       if (tipo === 'SALIDA') stockNuevo = stockAnterior - cantidad
@@ -65,14 +74,16 @@ export async function POST(req: Request) {
 
       if (stockNuevo < 0) throw new Error('STOCK_INSUFICIENTE')
 
-      const productoActualizado = await tx.producto.update({
-        where: { id: productoId },
+      await tx.productoSede.update({
+        where: { productoId_sedeId: { productoId, sedeId } },
         data: { stock: stockNuevo },
       })
+      const productoActualizado = { ...producto, stock: stockNuevo }
 
       const movimiento = await tx.movimientoInventario.create({
         data: {
           productoId,
+          sedeId,
           tipo,
           cantidad,
           stockAnterior,

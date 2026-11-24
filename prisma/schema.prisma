@@ -309,6 +309,7 @@ model MovimientoInventario {
   usuario       User           @relation(fields: [usuarioId], references: [id])
   usuarioId     String
   creadoAt      DateTime       @default(now())
+  sedeId        String?
 
   @@index([productoId, creadoAt])
 }
@@ -805,6 +806,9 @@ model ProductoSede {
   sede        Sede     @relation(fields: [sedeId], references: [id], onDelete: Cascade)
   sedeId      String
   precioVenta Float?
+  // Stock propio de cada sede (el inventario no se comparte entre sedes).
+  stock       Int      @default(0)
+  alertaStock Int      @default(5)
 
   @@unique([productoId, sedeId])
 }

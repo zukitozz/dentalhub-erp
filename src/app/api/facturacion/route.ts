@@ -216,8 +216,9 @@ export async function POST(req: Request) {
     factura = await prisma.$transaction(async (tx) => {
       for (const item of items) {
         if (!item.productoId) continue
-        const updated = await tx.producto.updateMany({
-          where: { id: item.productoId, stock: { gte: item.cantidad } },
+        if (sedeId) await tx.productoSede.upsert({ where: { productoId_sedeId: { productoId: item.productoId, sedeId } }, update: {}, create: { productoId: item.productoId, sedeId } })
+        const updated = await tx.productoSede.updateMany({
+          where: { productoId: item.productoId, sedeId: sedeId ?? undefined, stock: { gte: item.cantidad } },
           data: { stock: { decrement: item.cantidad } },
         })
         if (updated.count !== 1) {
