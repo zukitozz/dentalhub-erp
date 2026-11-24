@@ -47,7 +47,7 @@ export default function TratamientosPage() {
   const [pagina, setPagina] = useState(1)
 
   const load = async () => {
-    const [tratamientosResponse, productosResponse] = await Promise.all([fetch('/api/tratamientos'), fetch('/api/productos')])
+    const [tratamientosResponse, productosResponse] = await Promise.all([fetch('/api/tratamientos?base=1'), fetch('/api/productos?base=1')])
     const [tratamientosData, productosData] = await Promise.all([tratamientosResponse.json(), productosResponse.json()])
     setTratamientos(Array.isArray(tratamientosData) ? tratamientosData : [])
     setProductos(Array.isArray(productosData) ? productosData : [])

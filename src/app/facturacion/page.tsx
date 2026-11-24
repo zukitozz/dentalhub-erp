@@ -113,7 +113,7 @@ const createInitialPago = () => ({ id: nuevoId(), metodo: 'EFECTIVO', monto: '' 
 
 const metodoPagoLabels: Record<string, string> = {
   EFECTIVO: 'Efectivo',
-  TARJETA: 'Tarjeta',
+  TARJETA: 'POS',
   YAPE: 'Yape',
   PLIN: 'Plin',
   TRANSFERENCIA: 'Transferencia',
@@ -946,7 +946,7 @@ function FacturacionContent() {
                       className="field mt-2"
                     >
                       <option value="EFECTIVO">Efectivo</option>
-                      <option value="TARJETA">Tarjeta</option>
+                      <option value="TARJETA">POS</option>
                       <option value="YAPE">Yape</option>
                       <option value="PLIN">Plin</option>
                       <option value="TRANSFERENCIA">Transferencia</option>
@@ -965,7 +965,7 @@ function FacturacionContent() {
                             className="field bg-white"
                           >
                             <option value="EFECTIVO">Efectivo</option>
-                            <option value="TARJETA">Tarjeta</option>
+                            <option value="TARJETA">POS</option>
                             <option value="YAPE">Yape</option>
                             <option value="PLIN">Plin</option>
                             <option value="TRANSFERENCIA">Transferencia</option>

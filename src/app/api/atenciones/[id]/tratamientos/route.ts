@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx, precioTratamiento } from '@/lib/sede'
 import { auth } from '@/lib/auth'
 import { parseComision, registrarGastoComision } from '@/lib/comisiones'
 
@@ -53,7 +54,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const session = await auth()
   const puedeCambiarPrecio = session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPERVISOR'
   const precioBody = Number(body.precio)
-  const precio = puedeCambiarPrecio && Number.isFinite(precioBody) && precioBody >= 0 ? precioBody : tratamiento.precio
+  const sedeCtx = await getSedeCtx()
+  const precioSede = await precioTratamiento(tratamiento.id, tratamiento.precio, sedeCtx?.sedeEscritura ?? null)
+  const precio = puedeCambiarPrecio && Number.isFinite(precioBody) && precioBody >= 0 ? precioBody : precioSede
 
   const orden = atencion.tratamientos.reduce((max, t) => Math.max(max, t.orden), -1) + 1
 
@@ -67,7 +70,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         odontologoId: body.odontologoId,
         orden,
         precio,
-        precioCatalogo: tratamiento.precio,
+        precioCatalogo: precioSede,
         comision,
         pieza: piezaDe(body.pieza),
         superficie: typeof body.superficie === 'string' && body.superficie.trim() ? body.superficie.trim().slice(0, 10) : null,
@@ -80,6 +83,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         odontologoId: body.odontologoId,
         concepto: `Comisión ${odontologo.name} - ${tratamiento.nombre}`,
         usuarioId: session?.user?.id,
+        sedeId: sedeCtx?.sedeEscritura,
       })
     }
     return creada

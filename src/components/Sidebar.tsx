@@ -18,6 +18,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PhoneCall,
+  Building2,
   Receipt,
   Settings,
   ShoppingBag,
@@ -30,6 +31,7 @@ import {
   X,
 } from 'lucide-react'
 import { BrandLogo } from '@/components/BrandLogo'
+import { SedeSelector } from '@/components/SedeSelector'
 import { useConfiguracion } from '@/components/ConfiguracionProvider'
 import { ROLE_LABELS, type UserRole } from '@/types/user'
 
@@ -79,6 +81,7 @@ const grupos: { titulo: string; items: Item[] }[] = [
   {
     titulo: 'Administración',
     items: [
+      { href: '/sedes', label: 'Sedes y precios', icon: Building2, roles: ['SUPERVISOR'] },
       { href: '/usuarios', label: 'Usuarios', icon: UserCog, roles: ['SUPERVISOR'] },
       { href: '/ajustes', label: 'Ajustes', icon: Settings, roles: ['SUPERVISOR'] },
     ],
@@ -189,6 +192,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
         </nav>
 
         <div className="border-t border-white/10 p-3">
+          <SedeSelector collapsed={collapsed} />
           <div className={`flex items-center gap-3 rounded-xl px-2 py-2 ${collapsed ? 'justify-center' : ''}`}>
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">{initials}</div>
             {!collapsed && (

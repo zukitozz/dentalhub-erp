@@ -49,7 +49,7 @@ export default function ProductosPage() {
   const [pagina, setPagina] = useState(1)
 
   const load = async () => {
-    const res = await fetch('/api/productos')
+    const res = await fetch('/api/productos?base=1')
     const data = await res.json()
     setProductos(Array.isArray(data) ? data.map(normalizeProducto) : [])
     setCargando(false)

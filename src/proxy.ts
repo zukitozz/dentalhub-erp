@@ -6,7 +6,7 @@ const { auth } = NextAuth(authConfig)
 
 // El odontólogo trabaja en la clínica (pacientes, expediente, citas, atenciones, documentos); no ve finanzas ni ajustes.
 const ODONTOLOGO_PERMITIDO = ['/bandeja', '/pacientes', '/citas', '/atenciones', '/documentos']
-const ADMIN_BLOQUEADO = ['/consultorios', '/usuarios', '/reportes/mensual', '/ajustes', '/inventario', '/productos', '/tratamientos', '/gastos', '/compras']
+const ADMIN_BLOQUEADO = ['/consultorios', '/sedes', '/usuarios', '/reportes/mensual', '/ajustes', '/inventario', '/productos', '/tratamientos', '/gastos', '/compras']
 
 function coincide(pathname: string, prefijos: string[]) {
   return prefijos.some((prefijo) => pathname === prefijo || pathname.startsWith(`${prefijo}/`))

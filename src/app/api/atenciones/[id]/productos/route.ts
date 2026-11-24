@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx, precioProducto } from '@/lib/sede'
 import { auth } from '@/lib/auth'
 import { parseComision, registrarGastoComision } from '@/lib/comisiones'
 
@@ -59,7 +60,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const session = await auth()
   const puedeCambiarPrecio = session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPERVISOR'
   const precioUnitBody = Number(body.precioUnit)
-  const precioUnit = puedeCambiarPrecio && Number.isFinite(precioUnitBody) && precioUnitBody >= 0 ? precioUnitBody : producto.precioVenta
+  const sedeCtx = await getSedeCtx()
+  const precioSede = await precioProducto(producto.id, producto.precioVenta, sedeCtx?.sedeEscritura ?? null)
+  const precioUnit = puedeCambiarPrecio && Number.isFinite(precioUnitBody) && precioUnitBody >= 0 ? precioUnitBody : precioSede
 
   const comision = parseComision(body.comision)
   let odontologo: { id: string; name: string } | null = null
@@ -79,7 +82,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         productoId: producto.id,
         cantidad,
         precioUnit,
-        precioCatalogo: producto.precioVenta,
+        precioCatalogo: precioSede,
         comision,
         comisionOdontologoId: odontologo?.id ?? null,
       },
@@ -91,6 +94,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         odontologoId: odontologo.id,
         concepto: `Comisión ${odontologo.name} - ${producto.nombre}`,
         usuarioId: session?.user?.id,
+        sedeId: sedeCtx?.sedeEscritura,
       })
     }
     return creado

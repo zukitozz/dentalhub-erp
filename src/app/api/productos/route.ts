@@ -1,17 +1,24 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx } from '@/lib/sede'
 import { presignarProducto, presignarProductos } from '@/lib/storage'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: Request) {
   const guard = await requireApiAuth()
   if (guard) return guard
   const productos = await prisma.producto.findMany({
     orderBy: { creadoAt: 'desc' },
   })
-  return NextResponse.json(await presignarProductos(productos))
+  const firmados = await presignarProductos(productos)
+  // ?base=1 (mantenimiento del catálogo): precios base; si no, el precio de la sede.
+  if (new URL(req.url).searchParams.get('base') === '1') return NextResponse.json(firmados)
+  const ctx = await getSedeCtx()
+  const sedeId = ctx?.sedeEscritura
+  const porSede = sedeId ? new Map((await prisma.productoSede.findMany({ where: { sedeId } })).map((f) => [f.productoId, f.precioVenta])) : new Map<string, number | null>()
+  return NextResponse.json(firmados.map((p) => ({ ...p, precioBase: p.precioVenta, precioVenta: porSede.get(p.id) ?? p.precioVenta })))
 }
 
 export async function POST(req: Request) {

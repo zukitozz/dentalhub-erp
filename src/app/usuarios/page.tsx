@@ -16,9 +16,11 @@ interface Usuario {
   colegiatura: string | null
   especialidad: string | null
   createdAt: string
+  sedeId: string | null
+  sede: { nombre: string } | null
 }
 
-const emptyForm = { name: '', email: '', password: '', role: 'ODONTOLOGO' as Usuario['role'], celular1: '', celular2: '', colegiatura: '', especialidad: '', activo: true }
+const emptyForm = { name: '', email: '', password: '', role: 'ODONTOLOGO' as Usuario['role'], celular1: '', celular2: '', colegiatura: '', especialidad: '', activo: true, sedeId: '' }
 
 function submitLabel(loading: boolean, editingId: string | null) {
   if (loading) return 'Guardando...'
@@ -32,6 +34,7 @@ export default function UsuariosPage() {
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
 
   const load = async () => {
     const response = await fetch('/api/usuarios')
@@ -43,7 +46,10 @@ export default function UsuariosPage() {
     setUsers(Array.isArray(data) ? data : [])
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    void load()
+    void fetch('/api/sedes').then((r) => r.json()).then((d) => setSedes(Array.isArray(d) ? d : []))
+  }, [])
 
   const saveUser = async () => {
     setLoading(true)
@@ -79,6 +85,7 @@ export default function UsuariosPage() {
       colegiatura: user.colegiatura || '',
       especialidad: user.especialidad || '',
       activo: user.activo,
+      sedeId: user.sedeId || '',
     })
   }
 
@@ -128,10 +135,16 @@ export default function UsuariosPage() {
               <input aria-label="Celular 2" placeholder="Celular 2" value={form.celular2} onChange={(e) => setForm({ ...form, celular2: e.target.value })} className="field" />
             </div>
             <select aria-label="Rol" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Usuario['role'] })} className="field">
-              <option value="ODONTOLOGO">Odontólogo</option>
+              <option value="ODONTOLOGO">Odontólogo / Asistente</option>
               <option value="ADMIN">Recepción</option>
               {form.role === 'SUPERVISOR' && <option value="SUPERVISOR" disabled>Gerente (no se pueden crear más)</option>}
             </select>
+            {form.role !== 'SUPERVISOR' && (
+              <select aria-label="Sede" value={form.sedeId} onChange={(e) => setForm({ ...form, sedeId: e.target.value })} className="field">
+                <option value="">Selecciona la sede del usuario</option>
+                {sedes.map((sede) => <option key={sede.id} value={sede.id}>{sede.nombre}</option>)}
+              </select>
+            )}
             {form.role === 'ODONTOLOGO' && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <input aria-label="N.º de colegiatura (COP)" placeholder="N.º de colegiatura (COP)" value={form.colegiatura} onChange={(e) => setForm({ ...form, colegiatura: e.target.value })} className="field" />
@@ -155,7 +168,7 @@ export default function UsuariosPage() {
               <div key={user.id} className="flex items-center justify-between rounded-3xl border border-ink-200 bg-ink-50 p-4">
                 <div>
                   <p className="font-semibold text-ink-900">{user.name}</p>
-                  <p className="text-sm text-ink-500">{user.email} · {ROLE_LABELS[user.role]}{user.colegiatura ? ` · COP ${user.colegiatura}` : ''}{user.activo ? '' : ' · Inactivo'}</p>
+                  <p className="text-sm text-ink-500">{user.email} · {ROLE_LABELS[user.role]}{user.role === 'SUPERVISOR' ? ' · Todas las sedes' : user.sede ? ` · ${user.sede.nombre}` : ''}{user.colegiatura ? ` · COP ${user.colegiatura}` : ''}{user.activo ? '' : ' · Inactivo'}</p>
                   {(user.celular1 || user.celular2) && (
                     <p className="mt-1 text-sm text-ink-500">
                       Cel: {[user.celular1, user.celular2].filter(Boolean).join(' · ')}

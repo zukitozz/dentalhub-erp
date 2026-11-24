@@ -6,11 +6,11 @@ export const facturaPendienteInclude = {
   paciente: { select: { id: true, nombre: true } },
 } satisfies Prisma.FacturaInclude
 
-export function obtenerFacturasPendientes(client: ClientLike) {
+export function obtenerFacturasPendientes(client: ClientLike, sedeId?: string | null) {
   return client.factura.findMany({
     // cuentaParaCierre:false excluye el comprobante final que consolida un plan de pagos
     // parciales (ver src/lib/planes.ts): ese dinero ya se contabilizó al cobrar cada abono.
-    where: { estado: 'PAGADO', cierreTurnoId: null, activo: true, cuentaParaCierre: true },
+    where: { estado: 'PAGADO', cierreTurnoId: null, activo: true, cuentaParaCierre: true, ...(sedeId ? { sedeId } : {}) },
     include: facturaPendienteInclude,
     orderBy: { creadoAt: 'asc' },
   })

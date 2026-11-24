@@ -17,7 +17,7 @@ export function parseComision(valor: unknown): number | null {
  */
 export function registrarGastoComision(
   client: ClientLike,
-  datos: { monto: number; odontologoId: string; concepto: string; usuarioId?: string | null }
+  datos: { monto: number; odontologoId: string; concepto: string; usuarioId?: string | null; sedeId?: string | null }
 ) {
   return client.gasto.create({
     data: {
@@ -27,13 +27,14 @@ export function registrarGastoComision(
       fecha: mediodiaPeru(hoyPeru()),
       odontologoId: datos.odontologoId,
       usuarioId: datos.usuarioId ?? null,
+      sedeId: datos.sedeId ?? null,
     },
   })
 }
 
-export function obtenerGastosPendientes(client: ClientLike) {
+export function obtenerGastosPendientes(client: ClientLike, sedeId?: string | null) {
   return client.gasto.findMany({
-    where: { activo: true, cierreTurnoId: null, categoria: CATEGORIA_COMISIONES },
+    where: { activo: true, cierreTurnoId: null, categoria: CATEGORIA_COMISIONES, ...(sedeId ? { sedeId } : {}) },
     include: { odontologo: { select: { id: true, name: true } } },
     orderBy: { creadoAt: 'asc' },
   })

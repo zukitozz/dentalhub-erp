@@ -5,7 +5,7 @@ import { requireApiAuth } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
-const select = { id: true, name: true, email: true, role: true, celular1: true, celular2: true, activo: true, colegiatura: true, especialidad: true, createdAt: true }
+const select = { id: true, name: true, email: true, role: true, celular1: true, celular2: true, activo: true, colegiatura: true, especialidad: true, createdAt: true, sedeId: true, sede: { select: { nombre: true } } }
 
 export async function GET() {
   const guard = await requireApiAuth(['SUPERVISOR'])
@@ -30,6 +30,9 @@ export async function POST(req: Request) {
   if (body.role === 'SUPERVISOR') {
     return NextResponse.json({ error: 'No se pueden crear más usuarios Gerente' }, { status: 400 })
   }
+  if (!body.sedeId) {
+    return NextResponse.json({ error: 'Asigna una sede al usuario' }, { status: 400 })
+  }
 
   try {
     const password = await bcrypt.hash(String(body.password), 12)
@@ -39,6 +42,7 @@ export async function POST(req: Request) {
         email: String(body.email).toLowerCase().trim(),
         password,
         role: body.role || 'ODONTOLOGO',
+        sedeId: String(body.sedeId),
         celular1: (body.celular1 as string) || null,
         celular2: (body.celular2 as string) || null,
         colegiatura: (body.colegiatura as string) || null,
@@ -81,6 +85,8 @@ export async function PUT(req: Request) {
         name: String(body.name),
         email: String(body.email).toLowerCase().trim(),
         role: body.role || 'ODONTOLOGO',
+        // El gerente no pertenece a una sede (ve todas); el resto debe tener una.
+        ...(body.role === 'SUPERVISOR' ? { sedeId: null } : body.sedeId ? { sedeId: String(body.sedeId) } : {}),
         celular1: (body.celular1 as string) || null,
         celular2: (body.celular2 as string) || null,
         colegiatura: (body.colegiatura as string) || null,

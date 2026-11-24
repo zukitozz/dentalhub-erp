@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx } from '@/lib/sede'
 import { auth } from '@/lib/auth'
 import { mediodiaPeru } from '@/lib/fechas'
 
@@ -9,8 +10,9 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const guard = await requireApiAuth(['SUPERVISOR'])
   if (guard) return guard
+  const ctx = await getSedeCtx()
   const gastos = await prisma.gasto.findMany({
-    where: { activo: true },
+    where: { ...ctx?.filtro, activo: true },
     orderBy: { fecha: 'desc' },
   })
   return NextResponse.json(gastos)
@@ -29,8 +31,10 @@ export async function POST(req: Request) {
 
   const session = await auth()
 
+  const ctx = await getSedeCtx()
   const gasto = await prisma.gasto.create({
     data: {
+      sedeId: ctx?.sedeEscritura,
       concepto: body.concepto.trim(),
       categoria: body.categoria || null,
       monto: Number(body.monto) || 0,

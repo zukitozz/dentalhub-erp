@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx } from '@/lib/sede'
 import { mesActualPeru, rangoMesPeru } from '@/lib/fechas'
 import { obtenerIngresosDelPeriodo } from '@/lib/reportesIngresos'
 
@@ -12,20 +13,22 @@ export async function GET(req: Request) {
 
   const mes = new URL(req.url).searchParams.get('mes') || mesActualPeru()
   const rango = rangoMesPeru(mes)
+  const ctx = await getSedeCtx()
+  const sede = ctx?.filtro ?? {}
 
   const [ingresos, gastos, gastosPorCategoria, cierres] = await Promise.all([
-    obtenerIngresosDelPeriodo(prisma, rango),
+    obtenerIngresosDelPeriodo(prisma, rango, ctx?.sedeLectura),
     prisma.gasto.aggregate({
-      where: { activo: true, fecha: rango },
+      where: { ...sede, activo: true, fecha: rango },
       _sum: { monto: true },
     }),
     prisma.gasto.groupBy({
       by: ['categoria'],
-      where: { activo: true, fecha: rango },
+      where: { ...sede, activo: true, fecha: rango },
       _sum: { monto: true },
     }),
     prisma.cierreTurno.findMany({
-      where: { activo: true, fechaFin: rango },
+      where: { ...sede, activo: true, fechaFin: rango },
       select: { id: true, fechaFin: true, totalVentas: true, usuario: { select: { name: true } } },
       orderBy: { fechaFin: 'asc' },
     }),

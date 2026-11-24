@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireApiAuth } from '@/lib/api-auth'
 import { auth } from '@/lib/auth'
 import { listarAtencionesEnCurso } from '@/lib/atenciones'
+import { getSedeCtx } from '@/lib/sede'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Usuario requerido' }, { status: 401 })
   }
 
-  const atenciones = await listarAtencionesEnCurso(session.user.role, session.user.id)
+  const ctx = await getSedeCtx()
+  const atenciones = await listarAtencionesEnCurso(session.user.role, session.user.id, ctx?.sedeLectura)
 
   return NextResponse.json(atenciones)
 }

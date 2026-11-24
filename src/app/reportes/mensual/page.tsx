@@ -14,7 +14,7 @@ interface ReporteMensual {
 
 const metodoLabels: Record<string, string> = {
   EFECTIVO: 'Efectivo',
-  TARJETA: 'Tarjeta',
+  TARJETA: 'POS',
   YAPE: 'Yape / Plin',
   TRANSFERENCIA: 'Transferencia',
   DEPOSITO: 'Depósito',

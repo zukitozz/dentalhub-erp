@@ -4,6 +4,7 @@ import { numeroALetras } from '@/lib/numeroALetras'
 import { CODIGO_SUNAT_TIPO_COMPROBANTE, TIPO_DOCUMENTO_CORRELATIVO } from '@/lib/comprobantes'
 import { enviarFacturaASunat } from '@/lib/enviarFactura'
 import { asegurarPdfComprobante } from '@/lib/comprobantePdf'
+import { buscarSerie, getSedeCtx } from '@/lib/sede'
 import type { MetodoPago } from '@/generated/prisma/client'
 
 const IGV_PORCENTAJE = Number(process.env.IGV_PORCENTAJE || '18')
@@ -79,7 +80,8 @@ export async function registrarAbono(params: { planId: string; monto: number; me
   if (!configuracion?.ruc) throw new PlanError('RUC del emisor no configurado')
 
   const tipoDocumento = TIPO_DOCUMENTO_CORRELATIVO.NOTA_VENTA
-  const serieConfig = await prisma.serie.findFirst({ where: { tipoComprobante: tipoDocumento, estado: 1 } })
+  const sedeId = (await getSedeCtx())?.sedeEscritura ?? null
+  const serieConfig = await buscarSerie(tipoDocumento, sedeId)
   if (!serieConfig) throw new PlanError('No hay serie configurada para nota de venta')
 
   const gravadas = round2(monto / (1 + IGV_PORCENTAJE / 100))
@@ -96,6 +98,7 @@ export async function registrarAbono(params: { planId: string; monto: number; me
 
     return tx.factura.create({
       data: {
+        sede: sedeId ? { connect: { id: sedeId } } : undefined,
         paciente: { connect: { id: plan.pacienteId } },
         plan: { connect: { id: plan.id } },
         tipo: 'NOTA_VENTA',
@@ -161,7 +164,8 @@ export async function emitirComprobanteFinal(params: {
   const configuracion = await prisma.configuracion.findUnique({ where: { id: 'default' }, select: { ruc: true } })
   if (!configuracion?.ruc) throw new PlanError('RUC del emisor no configurado')
 
-  const serieConfig = await prisma.serie.findFirst({ where: { tipoComprobante: tipoDocumento, estado: 1 } })
+  const sedeId = (await getSedeCtx())?.sedeEscritura ?? null
+  const serieConfig = await buscarSerie(tipoDocumento, sedeId)
   if (!serieConfig) throw new PlanError(`No hay serie configurada para el tipo de documento ${tipoDocumento}`)
 
   const gravadas = round2(total / (1 + IGV_PORCENTAJE / 100))
@@ -178,6 +182,7 @@ export async function emitirComprobanteFinal(params: {
 
     const creada = await tx.factura.create({
       data: {
+        sede: sedeId ? { connect: { id: sedeId } } : undefined,
         paciente: { connect: { id: plan.pacienteId } },
         plan: { connect: { id: plan.id } },
         tipo,

@@ -6,9 +6,9 @@ type ClientLike = PrismaClient | Prisma.TransactionClient
 // Mismo criterio que obtenerFacturasPendientes (src/lib/cierres.ts): cuentaParaCierre:false
 // excluye el comprobante final que consolida un plan de pagos parciales, para no duplicar ese
 // dinero (ya se contabilizó al cobrar cada abono).
-export async function obtenerIngresosDelPeriodo(client: ClientLike, rango: { gte: Date; lte: Date }) {
+export async function obtenerIngresosDelPeriodo(client: ClientLike, rango: { gte: Date; lte: Date }, sedeId?: string | null) {
   const facturas = await client.factura.findMany({
-    where: { activo: true, estado: 'PAGADO', cuentaParaCierre: true, fechaEmision: rango },
+    where: { activo: true, estado: 'PAGADO', cuentaParaCierre: true, fechaEmision: rango, ...(sedeId ? { sedeId } : {}) },
     select: {
       total: true,
       metodoPago: true,

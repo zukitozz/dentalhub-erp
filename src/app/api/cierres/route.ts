@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx } from '@/lib/sede'
 import { auth } from '@/lib/auth'
 import { obtenerGastosPendientes } from '@/lib/comisiones'
 import { obtenerFacturasPendientes, calcularTotales } from '@/lib/cierres'
@@ -15,8 +16,10 @@ export async function GET() {
   // Admin cierra turno y solo necesita el preview reciente; Gerente ve la reportería completa.
   const esAdmin = session?.user?.role === 'ADMIN'
 
+  const ctx = await getSedeCtx()
   const cierres = await prisma.cierreTurno.findMany({
     where: {
+      ...ctx?.filtro,
       activo: true,
       ...(esAdmin ? { fechaFin: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } : {}),
     },
@@ -30,6 +33,7 @@ export async function GET() {
 export async function POST() {
   const guard = await requireApiAuth(['ADMIN', 'SUPERVISOR'])
   if (guard) return guard
+  const sedeCtx = await getSedeCtx()
 
   const session = await auth()
   if (!session?.user?.id) {
@@ -38,19 +42,20 @@ export async function POST() {
 
   try {
     const cierre = await prisma.$transaction(async (tx) => {
-      const facturas = await obtenerFacturasPendientes(tx)
+      const facturas = await obtenerFacturasPendientes(tx, sedeCtx?.sedeEscritura)
       if (facturas.length === 0) {
         throw new Error('SIN_PENDIENTES')
       }
 
       const { total, totalesPorMetodo } = calcularTotales(facturas)
-      const gastos = await obtenerGastosPendientes(tx)
+      const gastos = await obtenerGastosPendientes(tx, sedeCtx?.sedeEscritura)
       const totalGastos = gastos.reduce((sum, gasto) => sum + gasto.monto, 0)
       const fechaInicio = facturas[0].creadoAt
       const fechaFin = new Date()
 
       const creado = await tx.cierreTurno.create({
         data: {
+          sede: sedeCtx?.sedeEscritura ? { connect: { id: sedeCtx.sedeEscritura } } : undefined,
           usuario: { connect: { id: session.user.id } },
           fechaInicio,
           fechaFin,

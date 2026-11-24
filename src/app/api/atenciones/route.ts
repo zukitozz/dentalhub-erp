@@ -2,6 +2,8 @@ import { Prisma } from '@/generated/prisma/client'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx } from '@/lib/sede'
+import { precioTratamiento } from '@/lib/sede'
 import { auth } from '@/lib/auth'
 import { cambiarEstadoConsultorio } from '@/lib/consultorios'
 import { rangoDiaPeru } from '@/lib/fechas'
@@ -75,15 +77,17 @@ export async function GET(req: Request) {
       : {}),
   }
 
+  const ctx = await getSedeCtx()
+  const whereSede = ctx?.sedeLectura ? { AND: [where, { atencion: { sedeId: ctx.sedeLectura } }] } : where
   const [atenciones, total] = await Promise.all([
     prisma.atencionTratamiento.findMany({
-      where,
+      where: whereSede,
       include,
       orderBy: { horaInicio: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
-    prisma.atencionTratamiento.count({ where }),
+    prisma.atencionTratamiento.count({ where: whereSede }),
   ])
 
   return NextResponse.json({ items: await Promise.all(atenciones.map(aplanar)), total, page, pageSize })
@@ -118,9 +122,11 @@ export async function POST(req: Request) {
 
   // Solo ADMIN/SUPERVISOR pueden acordar un precio distinto al del catálogo; el odontólogo
   // siempre asigna el tratamiento al precio de catálogo.
+  const ctx = await getSedeCtx()
+  const precioSede = await precioTratamiento(tratamiento.id, tratamiento.precio, ctx?.sedeEscritura ?? null)
   const puedeCambiarPrecio = session.user.role === 'ADMIN' || session.user.role === 'SUPERVISOR'
   const precioBody = Number(body.precio)
-  const precio = puedeCambiarPrecio && Number.isFinite(precioBody) && precioBody >= 0 ? precioBody : tratamiento.precio
+  const precio = puedeCambiarPrecio && Number.isFinite(precioBody) && precioBody >= 0 ? precioBody : precioSede
 
   try {
     const atencion = await prisma.$transaction(async (tx) => {
@@ -145,6 +151,7 @@ export async function POST(req: Request) {
 
       const nueva = await tx.atencion.create({
         data: {
+          sedeId: ctx?.sedeEscritura,
           pacienteId: body.pacienteId,
           consultorioId: body.consultorioId || null,
           citaId: body.citaId || null,
@@ -155,7 +162,7 @@ export async function POST(req: Request) {
               odontologoId: body.odontologoId,
               orden: 0,
               precio,
-              precioCatalogo: tratamiento.precio,
+              precioCatalogo: precioSede,
               pieza: Number.isInteger(Number(body.pieza)) && Number(body.pieza) > 0 ? Number(body.pieza) : null,
             },
           },

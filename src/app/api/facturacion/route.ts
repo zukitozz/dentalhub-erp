@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx, precioProducto, precioTratamiento } from '@/lib/sede'
 import { auth } from '@/lib/auth'
 import { obtenerCorrelativo, resolverPrefijo } from '@/lib/correlativos'
 import { numeroALetras } from '@/lib/numeroALetras'
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
   if (guard) return guard
   const fecha = new URL(req.url).searchParams.get('fecha') || hoyPeru()
   const facturas = await prisma.factura.findMany({
-    where: { activo: true, fechaHora: rangoDiaPeru(fecha) },
+    where: { ...(await getSedeCtx())?.filtro, activo: true, fechaHora: rangoDiaPeru(fecha) },
     include: { paciente: true, items: true, enviosWhatsapp: { orderBy: { creadoAt: 'desc' }, take: 1 } },
     orderBy: { creadoAt: 'desc' },
   })
@@ -63,6 +64,9 @@ export async function POST(req: Request) {
   const preciosProducto: Record<string, unknown> =
     body.preciosProducto && typeof body.preciosProducto === 'object' ? body.preciosProducto : {}
 
+  const sedeCtx = await getSedeCtx()
+  const sedeId = sedeCtx?.sedeEscritura ?? null
+
   const lineasTratamiento = tratamientoLineIds.length > 0
     ? await prisma.atencionTratamiento.findMany({
         where: { id: { in: tratamientoLineIds }, atencion: { pacienteId: body.pacienteId }, estado: 'FINALIZADA', facturaId: null },
@@ -78,8 +82,8 @@ export async function POST(req: Request) {
     : []
 
   const itemsDeAtenciones = [
-    ...lineasTratamiento.map((linea) => {
-      const precioCatalogo = linea.tratamiento.precio
+    ...(await Promise.all(lineasTratamiento.map(async (linea) => {
+      const precioCatalogo = await precioTratamiento(linea.tratamientoId, linea.tratamiento.precio, sedeId)
       const precioUnit = precioValido(preciosTratamiento[linea.id]) ?? linea.precio ?? precioCatalogo
       return {
         productoId: null as string | null,
@@ -89,9 +93,9 @@ export async function POST(req: Request) {
         total: round2(precioUnit),
         precioCatalogo,
       }
-    }),
-    ...lineasProducto.map((item) => {
-      const precioCatalogo = item.producto.precioVenta
+    }))),
+    ...(await Promise.all(lineasProducto.map(async (item) => {
+      const precioCatalogo = await precioProducto(item.productoId, item.producto.precioVenta, sedeId)
       const precioUnit = precioValido(preciosProducto[item.id]) ?? item.precioUnit
       return {
         productoId: item.productoId as string | null,
@@ -101,7 +105,7 @@ export async function POST(req: Request) {
         total: round2(item.cantidad * precioUnit),
         precioCatalogo,
       }
-    }),
+    }))),
   ]
 
   // Los items manuales admiten un producto o un tratamiento (sin control de stock en este último caso).
@@ -125,8 +129,8 @@ export async function POST(req: Request) {
       ? prisma.tratamiento.findMany({ where: { id: { in: tratamientoIdsManuales } }, select: { id: true, precio: true } })
       : Promise.resolve([] as { id: string; precio: number }[]),
   ])
-  const precioCatalogoProducto = new Map(productosCatalogo.map((p) => [p.id, p.precioVenta]))
-  const precioCatalogoTratamiento = new Map(tratamientosCatalogo.map((t) => [t.id, t.precio]))
+  const precioCatalogoProducto = new Map(await Promise.all(productosCatalogo.map(async (p) => [p.id, await precioProducto(p.id, p.precioVenta, sedeId)] as const)))
+  const precioCatalogoTratamiento = new Map(await Promise.all(tratamientosCatalogo.map(async (t) => [t.id, await precioTratamiento(t.id, t.precio, sedeId)] as const)))
 
   const itemsManuales = itemsManualesBody.map((item: any) => {
     const productoId = typeof item.productoId === 'string' && item.productoId.length > 0 ? item.productoId : null
@@ -193,7 +197,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'RUC del emisor no configurado' }, { status: 400 })
   }
 
-  const serieConfig = await prisma.serie.findFirst({ where: { tipoComprobante: tipoDocumento, estado: 1 } })
+  // Cada sede emite con sus propias series; si no tiene una propia, se usa una general (sin sede).
+  const serieConfig =
+    (sedeId ? await prisma.serie.findFirst({ where: { tipoComprobante: tipoDocumento, estado: 1, sedeId } }) : null) ??
+    (await prisma.serie.findFirst({ where: { tipoComprobante: tipoDocumento, estado: 1, sedeId: null } })) ??
+    (!sedeId ? await prisma.serie.findFirst({ where: { tipoComprobante: tipoDocumento, estado: 1 } }) : null)
   if (!serieConfig) {
     return NextResponse.json({ error: `No hay serie configurada para el tipo de documento ${tipoDocumento}` }, { status: 400 })
   }
@@ -230,6 +238,7 @@ export async function POST(req: Request) {
 
     const creada = await tx.factura.create({
       data: {
+        sede: sedeId ? { connect: { id: sedeId } } : undefined,
         paciente: { connect: { id: body.pacienteId } },
         tipo: tipo as 'BOLETA' | 'FACTURA' | 'NOTA_VENTA',
         total,
@@ -262,7 +271,7 @@ export async function POST(req: Request) {
     })
 
     for (const comision of comisionesManuales) {
-      await registrarGastoComision(tx, { ...comision, usuarioId: session.user.id })
+      await registrarGastoComision(tx, { ...comision, usuarioId: session.user.id, sedeId })
     }
 
     if (lineasTratamiento.length > 0) {

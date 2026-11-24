@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx } from '@/lib/sede'
 import { atencionActualInclude, mapConsultorioConAtencion } from '@/lib/consultorios'
 
 export const dynamic = 'force-dynamic'
@@ -9,7 +10,9 @@ export async function GET() {
   const guard = await requireApiAuth()
   if (guard) return guard
 
+  const ctx = await getSedeCtx()
   const consultorios = await prisma.consultorio.findMany({
+    where: ctx?.filtro,
     orderBy: { nombre: 'asc' },
     include: atencionActualInclude,
   })
@@ -22,8 +25,10 @@ export async function POST(req: Request) {
   if (guard) return guard
   const body = await req.json()
 
+  const ctx = await getSedeCtx()
   const consultorio = await prisma.consultorio.create({
     data: {
+      sedeId: ctx?.sedeEscritura,
       nombre: body.nombre,
       estado: body.estado || 'DISPONIBLE',
     },

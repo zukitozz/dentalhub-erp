@@ -10,5 +10,5 @@ export interface User {
 export const ROLE_LABELS: Record<UserRole, string> = {
   SUPERVISOR: 'Gerente',
   ADMIN: 'Recepción',
-  ODONTOLOGO: 'Odontólogo',
+  ODONTOLOGO: 'Odontólogo / Asistente',
 }

@@ -47,7 +47,7 @@ const NOMBRE_TIPO: Record<string, string> = {
 
 const NOMBRE_METODO_PAGO: Record<string, string> = {
   EFECTIVO: 'Efectivo',
-  TARJETA: 'Tarjeta',
+  TARJETA: 'POS',
   YAPE: 'Yape',
   PLIN: 'Plin',
   TRANSFERENCIA: 'Transferencia',

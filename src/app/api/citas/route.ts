@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
+import { getSedeCtx } from '@/lib/sede'
 import { hoyPeru, rangoDiaPeru } from '@/lib/fechas'
 import { actualizarEvento, crearEvento, eliminarEvento } from '@/lib/googleCalendar'
 
@@ -29,7 +30,9 @@ export async function GET() {
     data: { estado: 'EXPIRADA' },
   })
 
+  const ctx = await getSedeCtx()
   const citas = await prisma.cita.findMany({
+    where: ctx?.filtro,
     include: INCLUDE_CITA,
     orderBy: { fecha: 'asc' },
   })
@@ -47,8 +50,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'No se pueden crear citas en fechas anteriores a hoy' }, { status: 400 })
   }
 
+  const ctx = await getSedeCtx()
   const cita = await prisma.cita.create({
     data: {
+      sede: ctx?.sedeEscritura ? { connect: { id: ctx.sedeEscritura } } : undefined,
       paciente: body.pacienteId ? { connect: { id: body.pacienteId } } : undefined,
       fecha: new Date(body.fecha),
       tratamiento: body.tratamiento,

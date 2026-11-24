@@ -27,8 +27,9 @@ const lineaVisible: Prisma.AtencionTratamientoWhereInput = {
   OR: [{ estado: { in: [...LINEAS_ABIERTAS] } }, { estado: 'FINALIZADA', facturaId: null }],
 }
 
-export async function listarAtencionesEnCurso(role: string, userId: string) {
+export async function listarAtencionesEnCurso(role: string, userId: string, sedeId?: string | null) {
   const where: Prisma.AtencionWhereInput = {
+    ...(sedeId ? { sedeId } : {}),
     tratamientos: { some: role === 'ODONTOLOGO' ? { AND: [lineaVisible, { odontologoId: userId }] } : lineaVisible },
   }
 
