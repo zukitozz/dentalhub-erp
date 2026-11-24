@@ -26,7 +26,6 @@ export async function asegurarPdfComprobante(facturaId: string): Promise<string 
     const docCliente = esFactura && p.ruc ? `RUC ${p.ruc}` : p.dni ? `DNI ${p.dni}` : p.carnetExtranjeria ? `CE ${p.carnetExtranjeria}` : p.ruc ? `RUC ${p.ruc}` : null
     const pdf = generarPdfComprobante({
       empresa: config?.razonSocial || config?.nombreEmpresa || 'HubDental',
-      nombreComercial: config?.nombreEmpresa,
       ruc: factura.ruc,
       direccion: config?.direccionFiscal,
       tipo: TITULO[factura.tipo] ?? factura.tipo,
@@ -36,7 +35,7 @@ export async function asegurarPdfComprobante(facturaId: string): Promise<string 
       documento: docCliente,
       direccionCliente: p.direccion,
       metodoPago: factura.metodoPago.charAt(0) + factura.metodoPago.slice(1).toLowerCase(),
-      items: factura.items.map((i) => ({ cantidad: i.cantidad, descripcion: i.nombre, precioUnit: i.precioUnit, total: i.total })),
+      items: factura.items.map((i) => ({ codigo: i.codigoProducto, cantidad: i.cantidad, descripcion: i.nombre, precioUnit: i.precioUnit, total: i.total })),
       gravadas: factura.gravadas,
       igv: factura.igv,
       total: factura.total,
