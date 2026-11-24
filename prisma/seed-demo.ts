@@ -65,9 +65,9 @@ async function main() {
     { tipoComprobante: '51', codigoProposito: 'NOTA_VENTA', serie: '001', descripcion: 'Notas de venta / despacho' },
   ]
   for (const s of SERIES) {
-    const existe = await prisma.serie.findFirst({ where: { tipoComprobante: s.tipoComprobante, serie: s.serie } })
+    const existe = await prisma.serie.findFirst({ where: { tipoComprobante: s.tipoComprobante, serie: s.serie, sedeId: 'sede-principal' } })
     if (existe) await prisma.serie.update({ where: { id: existe.id }, data: { estado: 1 } })
-    else await prisma.serie.create({ data: { ...s, estado: 1 } })
+    else await prisma.serie.create({ data: { ...s, estado: 1, sedeId: 'sede-principal' } })
   }
 
   const config = await prisma.configuracion.upsert({ where: { id: 'default' }, update: {}, create: { id: 'default' } })
@@ -132,6 +132,59 @@ async function main() {
       })
     }
   }
+
+  // ── Sedes, referidos y precios por sede (demo) ──
+  await prisma.sede.upsert({ where: { id: 'sede-principal' }, update: { nombre: 'Sede San Isidro', direccion: 'Av. Javier Prado Este 1234, San Isidro' }, create: { id: 'sede-principal', nombre: 'Sede San Isidro', direccion: 'Av. Javier Prado Este 1234, San Isidro' } })
+  await prisma.sede.upsert({ where: { id: 'sede-miraflores' }, update: {}, create: { id: 'sede-miraflores', nombre: 'Sede Miraflores', direccion: 'Av. Larco 123, Miraflores' } })
+  await prisma.consultorio.updateMany({ where: { sedeId: null }, data: { sedeId: 'sede-principal' } })
+  if ((await prisma.consultorio.count({ where: { sedeId: 'sede-miraflores' } })) === 0) {
+    await prisma.consultorio.create({ data: { nombre: 'Consultorio A', sedeId: 'sede-miraflores' } })
+  }
+  const hash2 = await bcrypt.hash('Odontologo123!', 12)
+  await prisma.user.upsert({ where: { email: 'recepcion2@hubdental.pe' }, update: {}, create: { name: 'Recepción Miraflores', email: 'recepcion2@hubdental.pe', password: hash2, role: 'ADMIN', sedeId: 'sede-miraflores' } })
+  const odo2 = await prisma.user.upsert({ where: { email: 'odontologo2@hubdental.pe' }, update: {}, create: { name: 'Dr. Marco Salas', email: 'odontologo2@hubdental.pe', password: hash2, role: 'ODONTOLOGO', colegiatura: '41234', especialidad: 'Ortodoncista', sedeId: 'sede-miraflores' } })
+  await prisma.user.updateMany({ where: { role: { not: 'SUPERVISOR' }, sedeId: null }, data: { sedeId: 'sede-principal' } })
+  for (const s of SERIES) {
+    const existe = await prisma.serie.findFirst({ where: { tipoComprobante: s.tipoComprobante, serie: '002', sedeId: 'sede-miraflores' } })
+    if (!existe) await prisma.serie.create({ data: { ...s, serie: '002', descripcion: `${s.descripcion} - Miraflores`, estado: 1, sedeId: 'sede-miraflores' } })
+  }
+  // Mismo catálogo, precios distintos en Miraflores.
+  const PRECIOS_MIRAFLORES: [string, number][] = [['Consulta', 70], ['Profilaxis', 140], ['Resina compuesta (1', 150], ['Instalación de brackets', 2000]]
+  for (const [prefijo, precio] of PRECIOS_MIRAFLORES) {
+    const t = await prisma.tratamiento.findFirst({ where: { nombre: { startsWith: prefijo } } })
+    if (t) await prisma.tratamientoSede.upsert({ where: { tratamientoId_sedeId: { tratamientoId: t.id, sedeId: 'sede-miraflores' } }, update: { precio }, create: { tratamientoId: t.id, sedeId: 'sede-miraflores', precio } })
+  }
+
+  // Referidos: Ana recomendó a Luis y a Mateo; se registra una venta de Mateo para el reporte del mes.
+  const pacs = await prisma.paciente.findMany({ where: { dni: { in: ['45879632', '40123987', '75412036'] } } })
+  const ana = pacs.find((p) => p.dni === '45879632')
+  const luis = pacs.find((p) => p.dni === '40123987')
+  const mateo = pacs.find((p) => p.dni === '75412036')
+  if (ana && luis && mateo) {
+    await prisma.paciente.updateMany({ where: { id: { in: [luis.id, mateo.id] }, referidoPorId: null }, data: { referidoPorId: ana.id } })
+    const yaFacturo = await prisma.factura.count({ where: { pacienteId: mateo.id } })
+    if (yaFacturo === 0) {
+      const control = trats.find((t) => t.nombre.startsWith('Control de ortodoncia'))
+      if (control) {
+        const corr = await prisma.correlativo.upsert({
+          where: { ruc_tipoDocumento_serie_prefijo: { ruc, tipoDocumento: '03', serie: '002', prefijo: 'B' } },
+          update: { numeracion: { increment: 1 } },
+          create: { ruc, tipoDocumento: '03', serie: '002', prefijo: 'B', numeracion: 1 },
+        })
+        const precio = 100
+        const gravadas = Math.round((precio / 1.18) * 100) / 100
+        await prisma.factura.create({
+          data: {
+            pacienteId: mateo.id, tipo: 'BOLETA', total: precio, metodoPago: 'YAPE', estado: 'PAGADO', usuarioId: admin.id, sedeId: 'sede-miraflores',
+            tipoComprobante: '03', numeracionComprobante: `B002-${String(corr.numeracion).padStart(8, '0')}`, fechaHora: new Date(), fechaEmision: new Date(),
+            totalVenta: String(precio), gravadas, igv: Math.round((precio - gravadas) * 100) / 100, ruc, pagoYape: precio,
+            items: { create: [{ nombre: control.nombre, cantidad: 1, precioUnit: precio, total: precio, precioCatalogo: precio }] },
+          },
+        })
+      }
+    }
+  }
+  void odo2
   console.log('Datos de demostración listos (usuarios: odontologo@hubdental.pe / recepcion@hubdental.pe, clave Odontologo123!).')
 }
 
