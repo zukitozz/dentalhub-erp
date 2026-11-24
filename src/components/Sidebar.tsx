@@ -75,6 +75,7 @@ const grupos: { titulo: string; items: Item[] }[] = [
     items: [
       { href: '/facturacion', label: 'Facturación', icon: Receipt, roles: STAFF },
       { href: '/gastos', label: 'Gastos', icon: Wallet, roles: ['SUPERVISOR'] },
+      { href: '/reportes/referidos', label: 'Premios por recomendación', icon: Target, roles: ['SUPERVISOR'] },
       { href: '/reportes', label: 'Reportes', icon: BarChart3, roles: STAFF, roleLabels: { ADMIN: 'Cierre de turno' } },
     ],
   },

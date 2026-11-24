@@ -1,5 +1,6 @@
 'use client'
 
+import { SearchSelect } from '@/components/SearchSelect'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Spinner } from '@/components/Spinner'
@@ -13,6 +14,7 @@ interface Paciente {
   ruc: string | null
   carnetExtranjeria: string | null
   razonSocial: string | null
+  referidoPorId?: string | null
   celular: string | null
   distrito: string | null
   email: string | null
@@ -30,7 +32,7 @@ const PAGE_SIZE = 10
 
 const emptyForm = {
   nombre: '', dni: '', ruc: '', carnetExtranjeria: '', razonSocial: '', celular: '', distrito: '',
-  email: '', fechaNacimiento: '', direccion: '', sexo: '', ocupacion: '', apoderado: '', contactoEmergencia: '', alergias: '', notas: '',
+  email: '', fechaNacimiento: '', direccion: '', sexo: '', ocupacion: '', apoderado: '', contactoEmergencia: '', alergias: '', notas: '', referidoPorId: '',
 }
 
 function documentLabel(paciente: Paciente) {
@@ -102,6 +104,7 @@ export default function PacientesPage() {
       contactoEmergencia: paciente.contactoEmergencia || '',
       alergias: paciente.alergias || '',
       notas: paciente.notas || '',
+      referidoPorId: paciente.referidoPorId || '',
     })
     setMostrarFormulario(true)
   }
@@ -278,6 +281,18 @@ export default function PacientesPage() {
               <div>
                 <label htmlFor="paciente-razon-social" className="block text-sm font-medium text-ink-700">Razón social</label>
                 <input id="paciente-razon-social" value={form.razonSocial} onChange={(event) => setForm((prev) => ({ ...prev, razonSocial: event.target.value }))} className="field mt-2" placeholder="Requerido para emitir factura" />
+              </div>
+
+              <div>
+                <label htmlFor="paciente-referido" className="block text-sm font-medium text-ink-700">Recomendado por (opcional)</label>
+                <SearchSelect
+                  id="paciente-referido"
+                  ariaLabel="Recomendado por"
+                  value={form.referidoPorId}
+                  onChange={(value) => setForm((prev) => ({ ...prev, referidoPorId: value }))}
+                  placeholder="Busca al paciente que lo recomendó"
+                  options={[{ value: '', label: 'Nadie / no aplica' }, ...pacientes.filter((p) => p.id !== editingId).map((p) => ({ value: p.id, label: `${p.nombre}${p.dni ? ` · ${p.dni}` : ''}` }))]}
+                />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

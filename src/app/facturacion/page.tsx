@@ -21,6 +21,7 @@ interface Paciente {
   carnetExtranjeria?: string | null
   razonSocial?: string | null
   celular?: string | null
+  referidoPorId?: string | null
 }
 
 interface Producto {
@@ -464,6 +465,19 @@ function FacturacionContent() {
     if (match) setPacienteQuery(match.nombre)
   }, [pacientes, form.pacienteId, pacienteQuery])
 
+  const pacienteSeleccionado = form.pacienteId ? pacientes.find((p) => p.id === form.pacienteId) : undefined
+
+  const guardarReferido = async (pacienteId: string, referidoPorId: string) => {
+    if (!referidoPorId) return
+    const res = await fetch(`/api/pacientes/${pacienteId}/referido`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ referidoPorId }) })
+    if (!res.ok) {
+      toast.error('No se pudo registrar quién lo recomendó')
+      return
+    }
+    setPacientes((prev) => prev.map((p) => (p.id === pacienteId ? { ...p, referidoPorId } : p)))
+    toast.success('Recomendación registrada')
+  }
+
   const seleccionarPaciente = (paciente: Paciente) => {
     setForm((prev) => ({ ...prev, pacienteId: paciente.id }))
     setPacienteQuery(paciente.nombre)
@@ -785,6 +799,20 @@ function FacturacionContent() {
                   >Paciente no desea identificarse · Usar &quot;Pacientes Varios&quot;</button>
                 )}
               </div>
+
+              {pacienteSeleccionado && !pacienteSeleccionado.referidoPorId && (
+                <div>
+                  <label htmlFor="factura-referido" className="block text-sm font-medium text-ink-700">¿Quién lo recomendó? (opcional)</label>
+                  <SearchSelect
+                    id="factura-referido"
+                    ariaLabel="Quién recomendó al paciente"
+                    value=""
+                    onChange={(value) => void guardarReferido(pacienteSeleccionado.id, value)}
+                    placeholder="Busca al paciente que lo recomendó"
+                    options={pacientes.filter((p) => p.id !== pacienteSeleccionado.id).map((p) => ({ value: p.id, label: p.nombre }))}
+                  />
+                </div>
+              )}
 
               {nuevoPacienteAbierto && (
                 <div className="rounded-3xl border border-brand-200 bg-brand-50 p-4">

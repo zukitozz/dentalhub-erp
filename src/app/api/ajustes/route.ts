@@ -35,6 +35,7 @@ export async function PUT(req: Request) {
       facturacionActivo: Boolean(body.facturacionActivo),
       horasExpiracionCita: Math.max(1, Number(body.horasExpiracionCita) || 24),
       usaConsultorios: Boolean(body.usaConsultorios),
+      ...(body.porcentajeReferido !== undefined ? { porcentajeReferido: Math.min(100, Math.max(0, Number(body.porcentajeReferido) || 0)) } : {}),
     },
     create: {
       id: 'default',

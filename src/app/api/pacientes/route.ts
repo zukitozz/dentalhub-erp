@@ -48,6 +48,8 @@ function pacienteData(body: Record<string, unknown>) {
     contactoEmergencia: (body.contactoEmergencia as string) || null,
     alergias: (body.alergias as string) || null,
     notas: (body.notas as string) || null,
+    // Quién recomendó al paciente (solo si viene en el cuerpo, para no borrarlo en ediciones parciales).
+    ...(body.referidoPorId !== undefined ? { referidoPorId: (body.referidoPorId as string) || null } : {}),
   }
 }
 
