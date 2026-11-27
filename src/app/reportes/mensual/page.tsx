@@ -1,15 +1,20 @@
 'use client'
 
 import Link from 'next/link'
+import { DetalleCierre, type CierreResumen } from '@/components/DetalleCierre'
 import { useEffect, useState } from 'react'
 import { Spinner } from '@/components/Spinner'
+import { BarrasHorizontales, COLOR_GASTOS, COLOR_INGRESOS, GraficoDiario, type PuntoDia } from '@/components/ReporteCharts'
 
 interface ReporteMensual {
   mes: string
   ingresos: { total: number; totalesPorMetodo: Record<string, number> }
   gastos: { total: number; porCategoria: { categoria: string; total: number }[] }
   diferencia: number
-  cierres: { id: string; fechaFin: string; totalVentas: number; usuario: string }[]
+  porDia: PuntoDia[]
+  compras: { total: number; items: { id: string; concepto: string; proveedor: string | null; monto: number }[] }
+  consumo: { producto: string; unidades: number; costo: number }[]
+  cierres: { id: string; fechaInicio: string; fechaFin: string; totalVentas: number; totalGastos: number; usuario: string }[]
 }
 
 const metodoLabels: Record<string, string> = {
@@ -29,6 +34,7 @@ export default function ReporteMensualPage() {
   const [mes, setMes] = useState(mesActual())
   const [reporte, setReporte] = useState<ReporteMensual | null>(null)
   const [cargando, setCargando] = useState(true)
+  const [cierreAbierto, setCierreAbierto] = useState<CierreResumen | null>(null)
 
   useEffect(() => {
     setCargando(true)
@@ -83,42 +89,64 @@ export default function ReporteMensualPage() {
               </p>
             </div>
 
+            <div className="card-surface">
+              <h2 className="text-xl font-semibold text-brand-900">Ingresos y gastos por día</h2>
+              <div className="mt-4"><GraficoDiario datos={reporte.porDia} /></div>
+            </div>
+
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="card-surface">
                 <h2 className="text-xl font-semibold text-brand-900">Ingresos por método de pago</h2>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {Object.entries(reporte.ingresos.totalesPorMetodo)
+                <BarrasHorizontales
+                  color={COLOR_INGRESOS}
+                  vacio="No hay ingresos registrados este mes."
+                  datos={Object.entries(reporte.ingresos.totalesPorMetodo)
                     .filter(([metodo]) => metodo !== 'PLIN')
-                    .map(([metodo, valor]) => (
-                      <div key={metodo} className="rounded-3xl bg-ink-50 p-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-ink-500">{metodoLabels[metodo] || metodo}</p>
-                        <p className="mt-2 text-lg font-semibold text-brand-900">S/ {valor.toFixed(2)}</p>
-                      </div>
-                    ))}
-                </div>
+                    .map(([metodo, valor]) => ({ etiqueta: metodoLabels[metodo] || metodo, valor }))}
+                />
                 <p className="mt-5 text-sm text-ink-600">Total ingresos: <span className="font-semibold text-brand-900">S/ {reporte.ingresos.total.toFixed(2)}</span></p>
               </div>
 
               <div className="card-surface">
                 <h2 className="text-xl font-semibold text-brand-900">Gastos por categoría</h2>
-                {reporte.gastos.porCategoria.length === 0 ? (
-                  <p className="mt-4 text-sm text-ink-500">No hay gastos registrados este mes.</p>
-                ) : (
-                  <div className="mt-5 space-y-3">
-                    {reporte.gastos.porCategoria.map((item) => (
-                      <div key={item.categoria} className="flex items-center justify-between rounded-2xl border border-ink-100 bg-white px-4 py-3 text-sm">
-                        <span className="font-medium text-ink-900">{item.categoria}</span>
-                        <span className="font-semibold text-ink-700">S/ {item.total.toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <BarrasHorizontales
+                  color={COLOR_GASTOS}
+                  vacio="No hay gastos registrados este mes."
+                  datos={reporte.gastos.porCategoria.map((item) => ({ etiqueta: item.categoria, valor: item.total }))}
+                />
                 <p className="mt-5 text-sm text-ink-600">Total gastos: <span className="font-semibold text-danger-700">S/ {reporte.gastos.total.toFixed(2)}</span></p>
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="card-surface">
+                <h2 className="text-xl font-semibold text-brand-900">Compras del mes</h2>
+                <BarrasHorizontales
+                  color={COLOR_GASTOS}
+                  vacio="No se registraron compras este mes."
+                  datos={reporte.compras.items.map((c) => ({ etiqueta: c.proveedor ? `${c.concepto} · ${c.proveedor}` : c.concepto, valor: c.monto }))}
+                />
+                <p className="mt-5 text-sm text-ink-600">Total compras: <span className="font-semibold text-danger-700">S/ {reporte.compras.total.toFixed(2)}</span></p>
+              </div>
+
+              <div className="card-surface">
+                <h2 className="text-xl font-semibold text-brand-900">Productos consumidos</h2>
+                <BarrasHorizontales
+                  color={COLOR_INGRESOS}
+                  vacio="No hubo consumo de productos este mes."
+                  formato={(n) => `${n} uds`}
+                  datos={reporte.consumo.map((c) => ({ etiqueta: c.producto, valor: c.unidades }))}
+                />
+                <p className="mt-5 text-sm text-ink-600">
+                  Costo estimado: <span className="font-semibold text-brand-900">S/ {reporte.consumo.reduce((t, c) => t + c.costo, 0).toFixed(2)}</span>
+                  <span className="text-xs text-ink-500"> · ventas de productos y salidas de inventario</span>
+                </p>
               </div>
             </div>
 
             <div className="card-surface">
               <h2 className="text-xl font-semibold text-brand-900">Cierres de turno realizados ({reporte.cierres.length})</h2>
+              <p className="mt-1 text-xs text-ink-500 print:hidden">Haz clic en un cierre para ver todas sus ventas.</p>
               {reporte.cierres.length === 0 ? (
                 <p className="mt-4 text-sm text-ink-500">No se realizaron cierres este mes.</p>
               ) : (
@@ -132,7 +160,14 @@ export default function ReporteMensualPage() {
                   </thead>
                   <tbody>
                     {reporte.cierres.map((cierre) => (
-                      <tr key={cierre.id} className="border-b border-ink-100">
+                      <tr
+                        key={cierre.id}
+                        tabIndex={0}
+                        role="button"
+                        onClick={() => setCierreAbierto({ id: cierre.id, fechaInicio: cierre.fechaInicio, fechaFin: cierre.fechaFin, totalVentas: cierre.totalVentas, totalGastos: cierre.totalGastos, usuarioNombre: cierre.usuario })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.click() }}
+                        className="cursor-pointer border-b border-ink-100 transition hover:bg-brand-50"
+                      >
                         <td className="py-2 pr-4">{new Date(cierre.fechaFin).toLocaleString('es-PE')}</td>
                         <td className="py-2 pr-4">{cierre.usuario}</td>
                         <td className="py-2 text-right font-semibold text-ink-800">S/ {cierre.totalVentas.toFixed(2)}</td>
@@ -153,6 +188,7 @@ export default function ReporteMensualPage() {
           </>
         )}
       </div>
+      {cierreAbierto && <DetalleCierre cierre={cierreAbierto} onClose={() => setCierreAbierto(null)} />}
     </div>
   )
 }

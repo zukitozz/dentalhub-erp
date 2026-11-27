@@ -96,7 +96,7 @@ function PlanesContent() {
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [creando, setCreando] = useState(false)
-  const [nuevoPlan, setNuevoPlan] = useState({ pacienteNombre: '', tratamientoId: '', nombre: '', sesionesTotal: '10', precioTotal: '' })
+  const [nuevoPlan, setNuevoPlan] = useState({ pacienteId: '', tratamientoId: '', nombre: '', sesionesTotal: '10', precioTotal: '' })
   const [lineas, setLineas] = useState<LineaNuevoPlan[]>([{ ...LINEA_VACIA }])
   const lineasValidas = lineas.filter((l) => l.descripcion.trim())
   const totalLineas = lineasValidas.reduce((acc, l) => acc + l.cantidad * l.precioUnit, 0)
@@ -137,7 +137,7 @@ function PlanesContent() {
   useEffect(() => {
     if (!abrirNuevoDesdeQuery || pacientes.length === 0) return
     const p = pacientes.find((x) => x.id === pacienteQuery)
-    if (p) setNuevoPlan((prev) => ({ ...prev, pacienteNombre: p.nombre }))
+    if (p) setNuevoPlan((prev) => ({ ...prev, pacienteId: p.id }))
     setMostrarFormulario(true)
   }, [abrirNuevoDesdeQuery, pacienteQuery, pacientes])
 
@@ -165,7 +165,7 @@ function PlanesContent() {
   }
 
   const handleCrearPlan = async () => {
-    const paciente = pacientes.find((c) => c.nombre.toLowerCase() === nuevoPlan.pacienteNombre.trim().toLowerCase())
+    const paciente = pacientes.find((c) => c.id === nuevoPlan.pacienteId)
     if (!paciente) {
       toast.error('Selecciona un paciente válido de la lista')
       return
@@ -220,7 +220,7 @@ function PlanesContent() {
 
     toast.success('Plan creado correctamente')
     setMostrarFormulario(false)
-    setNuevoPlan({ pacienteNombre: '', tratamientoId: '', nombre: '', sesionesTotal: '10', precioTotal: '' })
+    setNuevoPlan({ pacienteId: '', tratamientoId: '', nombre: '', sesionesTotal: '10', precioTotal: '' })
     setLineas([{ ...LINEA_VACIA }])
     await loadData()
   }
@@ -364,18 +364,14 @@ function PlanesContent() {
               <div className="mt-6 space-y-4">
                 <div>
                   <label htmlFor="plan-paciente" className="block text-sm font-medium text-ink-700">Paciente</label>
-                  <input
+                  <SearchSelect
                     id="plan-paciente"
-                    list="plan-pacientes-datalist"
-                    value={nuevoPlan.pacienteNombre}
-                    onChange={(event) => setNuevoPlan((prev) => ({ ...prev, pacienteNombre: event.target.value }))}
+                    value={nuevoPlan.pacienteId}
+                    onChange={(value) => setNuevoPlan((prev) => ({ ...prev, pacienteId: value }))}
+                    options={pacientes.map((paciente) => ({ value: paciente.id, label: paciente.nombre }))}
                     placeholder="Escribe el nombre del paciente"
-                    autoComplete="off"
-                    className="field mt-2"
+                    ariaLabel="Paciente"
                   />
-                  <datalist id="plan-pacientes-datalist">
-                    {pacientes.map((paciente) => <option key={paciente.id} value={paciente.nombre} />)}
-                  </datalist>
                 </div>
                 <div>
                   <label htmlFor="plan-nombre" className="block text-sm font-medium text-ink-700">Nombre del plan</label>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireApiAuth } from '@/lib/api-auth'
 import { auth } from '@/lib/auth'
+import { getSedeCtx } from '@/lib/sede'
 import { mediodiaPeru } from '@/lib/fechas'
 import { CATEGORIA_COMPRAS } from '@/lib/compras'
 import type { UserRole } from '@/types/user'
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
   }
 
   const session = await auth()
+  const sede = await getSedeCtx()
   const compra = await prisma.gasto.create({
     data: {
       concepto: body.concepto.trim(),
@@ -49,6 +51,7 @@ export async function POST(req: Request) {
       numeroComprobante: body.numeroComprobante || null,
       notas: body.notas || null,
       usuarioId: session?.user?.id || null,
+      sedeId: sede?.sedeEscritura,
     },
   })
   return NextResponse.json(compra, { status: 201 })

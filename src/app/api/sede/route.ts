@@ -25,6 +25,14 @@ export async function POST(req: Request) {
     const existe = await prisma.sede.findFirst({ where: { id: valor, activo: true }, select: { id: true } })
     if (!existe) return NextResponse.json({ error: 'Sede no encontrada' }, { status: 404 })
   }
-  ;(await cookies()).set(COOKIE_SEDE, valor, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 })
+  ;(await cookies()).set(COOKIE_SEDE, valor, { httpOnly: true, sameSite: 'lax', path: '/' }) // cookie de sesión: se vuelve a elegir al iniciar sesión
   return NextResponse.json({ sedeId: valor === SEDE_TODAS ? null : valor })
+}
+
+// Al iniciar sesión se olvida la sede anterior para que el gerente vuelva a elegir.
+export async function DELETE() {
+  const guard = await requireApiAuth()
+  if (guard) return guard
+  ;(await cookies()).delete(COOKIE_SEDE)
+  return NextResponse.json({ ok: true })
 }

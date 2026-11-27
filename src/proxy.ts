@@ -1,6 +1,7 @@
 import NextAuth from 'next-auth'
 import { NextResponse } from 'next/server'
 import { authConfig } from '@/lib/auth.config'
+import { COOKIE_SEDE } from '@/lib/sede-constants'
 
 const { auth } = NextAuth(authConfig)
 
@@ -20,6 +21,15 @@ export default auth((req) => {
     const loginUrl = new URL('/auth/login', req.url)
     loginUrl.searchParams.set('callbackUrl', pathname + search)
     return NextResponse.redirect(loginUrl)
+  }
+
+  // El gerente debe elegir sede (o "todas") tras iniciar sesión; puede volver a esta pantalla cuando quiera.
+  const enSelector = pathname === '/seleccionar-sede'
+  if (role !== 'SUPERVISOR' && enSelector) return NextResponse.redirect(new URL('/', req.url))
+  if (role === 'SUPERVISOR' && !enSelector && !req.cookies.get(COOKIE_SEDE)) {
+    const url = new URL('/seleccionar-sede', req.url)
+    url.searchParams.set('callbackUrl', pathname + search)
+    return NextResponse.redirect(url)
   }
 
   if (role === 'ODONTOLOGO' && !coincide(pathname, ODONTOLOGO_PERMITIDO)) {

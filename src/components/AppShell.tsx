@@ -16,7 +16,7 @@ export function AppShell({ children }: { readonly children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const collapsed = useAppStore((state) => state.sidebarCollapsed)
   const toggleSidebar = useAppStore((state) => state.toggleSidebar)
-  const isLogin = pathname.startsWith('/auth/login')
+  const isLogin = pathname.startsWith('/auth/login') || pathname === '/seleccionar-sede'
 
   if (isLogin || !session) return <>{children}</>
 

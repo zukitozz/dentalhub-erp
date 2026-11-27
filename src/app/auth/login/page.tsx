@@ -6,6 +6,7 @@ import { signIn } from 'next-auth/react'
 import { CalendarDays, FileText, FolderHeart, Receipt } from 'lucide-react'
 import { BrandLogo } from '@/components/BrandLogo'
 import { Spinner } from '@/components/Spinner'
+import { useSedeStore } from '@/store/useSedeStore'
 
 function destinoSeguro(callbackUrl: string | null) {
   if (!callbackUrl || !callbackUrl.startsWith('/') || callbackUrl.startsWith('//')) return '/dashboard'
@@ -40,6 +41,9 @@ function LoginForm() {
       return
     }
 
+    // Sede de la sesión anterior fuera: el gerente la elige de nuevo en la pantalla de sedes.
+    useSedeStore.getState().reset()
+    await fetch('/api/sede', { method: 'DELETE' })
     router.push(destinoSeguro(searchParams.get('callbackUrl')))
     router.refresh()
   }

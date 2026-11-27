@@ -2,8 +2,9 @@ import { cookies } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
-export const COOKIE_SEDE = 'hubdental.sede'
-export const SEDE_TODAS = 'todas'
+import { COOKIE_SEDE, SEDE_TODAS } from '@/lib/sede-constants'
+
+export { COOKIE_SEDE, SEDE_TODAS }
 
 export interface SedeCtx {
   userId: string
